@@ -268,6 +268,7 @@ class MainActivity : AppCompatActivity() {
                         if (!result.skipped) {
                             Library.add(this@MainActivity, clip, result.uri)
                             progress.progress = 100
+                            statusView.text = "Saved → ${result.path}"
                         }
                     } catch (e: CancellationException) {
                         throw e

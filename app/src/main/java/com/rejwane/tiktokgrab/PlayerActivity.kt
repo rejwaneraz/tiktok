@@ -95,7 +95,7 @@ class PlayerActivity : AppCompatActivity() {
                     status.text = "Downloading… ${percent.toInt()}%"
                 }
                 if (!result.skipped) Library.add(this@PlayerActivity, clip, result.uri)
-                status.text = "Saved ✓"
+                status.text = if (result.skipped) "Already downloaded" else "Saved → ${result.path}"
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {

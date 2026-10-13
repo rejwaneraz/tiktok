@@ -15,7 +15,8 @@ data class Clip(
     val bytes: Long,
     val thumb: String,
     val play: String,
-    val page: String
+    val page: String,
+    val author: String = ""
 )
 
 /** clips + the link the user typed, with any short link already expanded. match is set when a
@@ -106,7 +107,8 @@ object TikTokApi {
                     ?: video.optJSONArray("bitrateInfo")?.optJSONObject(0)?.optJSONObject("PlayAddr")?.optLong("DataSize") ?: 0L,
                 thumb = urlOf(video.opt("cover")).ifBlank { urlOf(video.opt("originCover")) },
                 play = bestSource(video).ifBlank { urlOf(video.opt("downloadAddr")) },
-                page = "https://www.tiktok.com/@$user/video/${item.optString("id")}"
+                page = "https://www.tiktok.com/@$user/video/${item.optString("id")}",
+                author = item.optJSONObject("author")?.optString("uniqueId").orEmpty().ifBlank { user }
             )
         }
     }

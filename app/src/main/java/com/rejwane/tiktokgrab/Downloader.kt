@@ -43,6 +43,12 @@ object Downloader {
         return "${if (title.isBlank()) "tiktok" else title} [${clip.id}].mp4"
     }
 
+    /** One folder per author: Downloads/TikTokGrab/<username>/… */
+    private fun folderFor(clip: Clip): String {
+        val author = clip.author.filterNot { ILLEGAL.contains(it) }.trim().trim('.')
+        return if (author.isBlank()) "other" else author
+    }
+
     /** The first hit sometimes fails until TikTok hands back a fresh msToken, so retry once. */
     suspend fun save(context: Context, clip: Clip, onPercent: (Float) -> Unit): Saved {
         if (clip.play.isBlank()) throw RuntimeException("no video link")
@@ -81,32 +87,33 @@ object Downloader {
                     if (total > 0) onPercent(w * 100f / total)
                 }
                 val (path, uri) = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q)
-                    saveScoped(context, name, response, onBytes)
+                    saveScoped(context, folderFor(clip), name, response, onBytes)
                 else
-                    saveLegacy(context, name, response, onBytes)
+                    saveLegacy(context, folderFor(clip), name, response, onBytes)
                 prefs(context).edit().putStringSet("ids", doneIds(context) + clip.id).apply()
                 Saved(clip.id, path, uri, written, false)
             }
         }
     }
 
-    private suspend fun saveScoped(context: Context, name: String, response: Response,
+    private suspend fun saveScoped(context: Context, folder: String, name: String, response: Response,
                                    onBytes: (Long) -> Unit): Pair<String, String> {
         val values = ContentValues().apply {
             put(MediaStore.Downloads.DISPLAY_NAME, name)
             put(MediaStore.Downloads.MIME_TYPE, "video/mp4")
-            put(MediaStore.Downloads.RELATIVE_PATH, "${Environment.DIRECTORY_DOWNLOADS}/$FOLDER")
+            put(MediaStore.Downloads.RELATIVE_PATH, "${Environment.DIRECTORY_DOWNLOADS}/$FOLDER/$folder")
         }
         val uri = context.contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
             ?: throw RuntimeException("could not create file")
         context.contentResolver.openOutputStream(uri)?.use { stream(response, it, onBytes) }
             ?: throw RuntimeException("could not write file")
-        return Pair("Downloads/$FOLDER/$name", uri.toString())
+        return Pair("Downloads/$FOLDER/$folder/$name", uri.toString())
     }
 
-    private suspend fun saveLegacy(context: Context, name: String, response: Response,
+    private suspend fun saveLegacy(context: Context, folder: String, name: String, response: Response,
                                    onBytes: (Long) -> Unit): Pair<String, String> {
-        val dir = File(context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), FOLDER)
+        val base = File(context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), FOLDER)
+        val dir = File(base, folder)
         dir.mkdirs()
         val file = File(dir, name)
         file.outputStream().use { stream(response, it, onBytes) }
