@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Cambria is not available on Android, so the platform serif family is used instead. -->
+    <style name="Widget.Grab.Text" parent="android:Widget.TextView">
+        <item name="android:fontFamily">serif</item>
+    </style>
+
+    <style name="Widget.Grab.Button" parent="Widget.Material3.Button">
+        <item name="android:fontFamily">serif</item>
+        <item name="android:textAllCaps">false</item>
+        <item name="cornerRadius">12dp</item>
+    </style>
+
+    <style name="Widget.Grab.Button.Outlined" parent="Widget.Material3.Button.OutlinedButton">
+        <item name="android:fontFamily">serif</item>
+        <item name="android:textAllCaps">false</item>
+        <item name="cornerRadius">12dp</item>
+    </style>
+
+    <style name="Theme.TikTokGrab" parent="Theme.Material3.Dark.NoActionBar">
+        <item name="colorPrimary">@color/accent</item>
+        <item name="colorOnPrimary">@color/text</item>
+        <item name="android:windowBackground">@color/bg</item>
+        <item name="android:statusBarColor">@color/bg</item>
+        <item name="android:textViewStyle">@style/Widget.Grab.Text</item>
+        <item name="materialButtonStyle">@style/Widget.Grab.Button</item>
+        <item name="materialButtonOutlinedStyle">@style/Widget.Grab.Button.Outlined</item>
+    </style>
+
+    <style name="Theme.TikTokGrab.Fullscreen" parent="Theme.TikTokGrab">
+        <item name="android:windowBackground">@android:color/black</item>
+        <item name="android:statusBarColor">@android:color/black</item>
+    </style>
+</resources>
