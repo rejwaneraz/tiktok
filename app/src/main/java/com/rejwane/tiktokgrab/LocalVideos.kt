@@ -9,7 +9,6 @@ import android.os.Build
 import android.os.Environment
 import android.os.Handler
 import android.os.Looper
-import android.provider.ContentUris
 import android.provider.MediaStore
 import android.util.LruCache
 import android.util.Size
@@ -79,8 +78,9 @@ object LocalVideos {
             val path = c.index(MediaStore.MediaColumns.RELATIVE_PATH)
             while (c.moveToNext()) {
                 val folder = c.str(path).substringAfter("Download/$ROOT/").trim('/')
+                val rowId = c.getLong(id)
                 out.add(LocalVideo(
-                    uri = ContentUris.withAppendedId(MediaStore.Downloads.EXTERNAL_CONTENT_URI, c.getLong(id)),
+                    uri = Uri.withAppendedPath(MediaStore.Downloads.EXTERNAL_CONTENT_URI, rowId.toString()),
                     name = c.str(title),
                     caption = captionOf(c.str(title)),
                     clipId = Regex("\\[(\\d+)]").find(c.str(title))?.groupValues?.get(1) ?: "",
