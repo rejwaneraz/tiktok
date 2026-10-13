@@ -37,4 +37,16 @@ object Http {
     /** Where a vm.tiktok / vt.tiktok short link actually lands. */
     fun finalUrl(url: String): String =
         client.newCall(request(url)).execute().use { response -> response.request.url.toString() }
+
+    /** Pulls one small binary — an author's avatar — straight onto disk. */
+    fun save(url: String, dest: java.io.File): Boolean {
+        val call = Request.Builder().url(url).header("User-Agent", UA).build()
+        client.newCall(call).execute().use { response ->
+            if (!response.isSuccessful) return false
+            val body = response.body ?: return false
+            dest.parentFile?.mkdirs()
+            body.byteStream().use { input -> dest.outputStream().use { input.copyTo(it) } }
+            return dest.length() > 0
+        }
+    }
 }

@@ -159,12 +159,14 @@ class MainActivity : AppCompatActivity() {
 
     /** The folder is the truth: whatever sits in Download/TikTokGrab is what this tab shows. */
     private fun refreshLibrary() {
-        val videos = LocalVideos.scan(this)
-        libraryList.adapter = LocalGridAdapter(videos, onOpen = { openOffline(it) }, onMenu = {
-            LocalMenu.show(this, it) { refreshLibrary() }
+        val saved = LocalVideos.scan(this)
+        val profiles = saved.map { it.author }.distinct()
+        libraryList.adapter = LocalGridAdapter(saved, onOpen = { openOffline(it) }, onMenu = { clip ->
+            LocalMenu.show(this, clip, profiles,
+                onDeleted = { refreshLibrary() }, onMoved = { refreshLibrary() })
         })
-        statusView.text = if (videos.isEmpty()) getString(R.string.library_empty)
-        else "${videos.size} saved · ${GridAdapter.mb(videos.sumOf { it.bytes })}"
+        statusView.text = if (saved.isEmpty()) getString(R.string.library_empty)
+        else "${saved.size} saved · ${GridAdapter.mb(saved.sumOf { it.bytes })}"
     }
 
     private fun openOffline(video: LocalVideo) {

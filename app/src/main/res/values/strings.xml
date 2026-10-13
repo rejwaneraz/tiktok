@@ -27,6 +27,13 @@
     <string name="library_empty">Nothing downloaded yet</string>
     <string name="offline_empty">No videos in Download/TikTokGrab yet</string>
     <string name="see_more">See more</string>
+    <string name="nav_back">Back</string>
+    <string name="nav_for_you">For You</string>
+    <string name="nav_profiles">Profiles</string>
+    <string name="play_all">▶ Play all</string>
+    <string name="move_to_profile">Move to profile</string>
+    <string name="no_other_profile">No other profile to move this to yet</string>
+    <string name="move_failed">Could not move the file</string>
 
     <string name="selected">%1$d of %2$d selected</string>
     <string name="loading">Loading…</string>

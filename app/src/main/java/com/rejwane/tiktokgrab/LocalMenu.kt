@@ -7,11 +7,13 @@ import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 
-/** The same long-press menu on both screens that list saved videos. */
+/** The same long-press menu on every screen that lists saved videos. */
 object LocalMenu {
 
-    fun show(host: AppCompatActivity, clip: LocalVideo, onDeleted: () -> Unit) {
-        val labels = arrayOf("Delete", "Share", "Play in another app", "Copy file name")
+    fun show(host: AppCompatActivity, clip: LocalVideo, profiles: List<String>,
+             onDeleted: () -> Unit, onMoved: () -> Unit) {
+        val labels = arrayOf("Delete", "Share", "Play in another app", "Copy file name",
+            "Move to profile")
         MaterialAlertDialogBuilder(host)
             .setTitle(clip.caption.ifBlank { clip.name })
             .setItems(labels) { _, which ->
@@ -20,7 +22,25 @@ object LocalMenu {
                     1 -> share(host, clip)
                     2 -> openOutside(host, clip)
                     3 -> copy(host, clip)
+                    4 -> move(host, clip, profiles, onMoved)
                 }
+            }
+            .show()
+    }
+
+    /** Profiles are folders, so moving the file is what moves it between profiles. */
+    private fun move(host: AppCompatActivity, clip: LocalVideo, profiles: List<String>,
+                     onMoved: () -> Unit) {
+        val targets = profiles.filter { it != clip.author }.sorted()
+        if (targets.isEmpty()) {
+            note(host, host.getString(R.string.no_other_profile))
+            return
+        }
+        MaterialAlertDialogBuilder(host)
+            .setTitle("Move to which profile?")
+            .setItems(targets.toTypedArray()) { _, which ->
+                if (LocalVideos.moveTo(host, clip, targets[which])) onMoved()
+                else note(host, host.getString(R.string.move_failed))
             }
             .show()
     }
@@ -62,6 +82,7 @@ object LocalMenu {
         note(host, "Copied ${clip.name}")
     }
 
-    private fun note(host: AppCompatActivity, text: String) =
+    private fun note(host: AppCompatActivity, text: String) {
         Toast.makeText(host, text, Toast.LENGTH_SHORT).show()
+    }
 }

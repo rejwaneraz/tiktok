@@ -90,7 +90,7 @@ object TikTokApi {
         return candidates.maxByOrNull { it.first }?.second ?: ""
     }
 
-    private fun parse(data: JSONObject, user: String): List<Clip> {
+    private fun parse(context: Context, data: JSONObject, user: String): List<Clip> {
         val status = data.optInt("statusCode", 0)
         if (status != 0) throw RuntimeException("TikTok API: ${data.optString("statusMsg", "$status")}")
         val items = data.optJSONArray("itemList") ?: JSONArray()
@@ -98,6 +98,8 @@ object TikTokApi {
             val item = items.optJSONObject(i) ?: return@mapNotNull null
             if (item.optBoolean("privateItem") || item.optBoolean("secret")) return@mapNotNull null
             val video = item.optJSONObject("video") ?: JSONObject()
+            val author = item.optJSONObject("author") ?: JSONObject()
+            Authors.captureItem(context, author)
             Clip(
                 id = item.optString("id"),
                 title = item.optString("desc").trim(),
@@ -108,7 +110,7 @@ object TikTokApi {
                 thumb = urlOf(video.opt("cover")).ifBlank { urlOf(video.opt("originCover")) },
                 play = bestSource(video).ifBlank { urlOf(video.opt("downloadAddr")) },
                 page = "https://www.tiktok.com/@$user/video/${item.optString("id")}",
-                author = item.optJSONObject("author")?.optString("uniqueId").orEmpty().ifBlank { user }
+                author = author.optString("uniqueId").ifBlank { user }
             )
         }
     }
@@ -144,6 +146,7 @@ object TikTokApi {
         if (uid.isBlank()) {
             throw RuntimeException("@$user — no data for this profile (private, or check login/internet)")
         }
+        Authors.captureFromPage(context, user, json)
         prefs.edit().putString(key, uid).apply()
         Log.d(TAG, "cached secUid for $user")
         return uid
@@ -176,11 +179,12 @@ object TikTokApi {
             if (rowsOnFirstPage < 0) rowsOnFirstPage = batch.length()
             if (batch.length() == 0) break
             pages++
-            val clips = parse(data, user)
+            val clips = parse(context, data, user)
             clips.firstOrNull { it.id == wantedId }?.let { match = it }
             for (clip in clips) {
                 if (seen.add(clip.id)) out.add(clip)
             }
+            Authors.saveViews(context, clips.associate { it.id to it.views })
             onProgress(out.size)
             if (match != null) break
             if (wantedId == null && out.size >= wanted) break

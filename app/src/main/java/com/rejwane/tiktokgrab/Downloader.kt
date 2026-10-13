@@ -44,10 +44,7 @@ object Downloader {
     }
 
     /** One folder per author: Downloads/TikTokGrab/<username>/… */
-    private fun folderFor(clip: Clip): String {
-        val author = clip.author.filterNot { ILLEGAL.contains(it) }.trim().trim('.')
-        return if (author.isBlank()) "other" else author
-    }
+    private fun folderFor(clip: Clip) = LocalVideos.sanitize(clip.author)
 
     /** The first hit sometimes fails until TikTok hands back a fresh msToken, so retry once. */
     suspend fun save(context: Context, clip: Clip, onPercent: (Float) -> Unit): Saved {
