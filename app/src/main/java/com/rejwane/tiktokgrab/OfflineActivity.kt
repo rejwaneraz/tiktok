@@ -96,15 +96,15 @@ class OfflineActivity : AppCompatActivity() {
         val groups = all.groupingBy { it.author }.eachCount().entries
             .sortedBy { it.key }
             .sortedByDescending { it.value }
-        chips.addView(chip("All", author.isEmpty())) {
+        chips.addView(chip("All", author.isEmpty()) {
             author = ""
             show(all, null)
-        }
+        })
         groups.forEach { (name, count) ->
-            chips.addView(chip("$name · $count", author == name)) {
+            chips.addView(chip("$name · $count", author == name) {
                 author = name
                 show(all.filter { it.author == name }, null)
-            }
+            })
         }
     }
 
