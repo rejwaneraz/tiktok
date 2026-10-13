@@ -94,7 +94,6 @@ class PlayerActivity : AppCompatActivity() {
                 val result = Downloader.save(this@PlayerActivity, clip) { percent ->
                     status.text = "Downloading… ${percent.toInt()}%"
                 }
-                if (!result.skipped) Library.add(this@PlayerActivity, clip, result.uri)
                 status.text = if (result.skipped) "Already downloaded" else "Saved → ${result.path}"
             } catch (e: CancellationException) {
                 throw e

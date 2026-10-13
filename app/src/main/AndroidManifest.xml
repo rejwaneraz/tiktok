@@ -30,6 +30,13 @@
             android:exported="false"
             android:screenOrientation="portrait"
             android:theme="@style/Theme.TikTokGrab.Fullscreen" />
+
+        <activity
+            android:name=".OfflineActivity"
+            android:configChanges="orientation|screenSize|keyboardHidden"
+            android:exported="false"
+            android:screenOrientation="portrait"
+            android:theme="@style/Theme.TikTokGrab.Fullscreen" />
     </application>
 
 </manifest>

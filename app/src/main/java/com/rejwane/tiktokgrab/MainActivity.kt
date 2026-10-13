@@ -2,7 +2,6 @@ package com.rejwane.tiktokgrab
 
 import android.content.ClipboardManager
 import android.content.Intent
-import android.net.Uri
 import android.os.Bundle
 import android.view.View
 import android.widget.AdapterView
@@ -43,6 +42,7 @@ class MainActivity : AppCompatActivity() {
     private var tikWeb: TikTokWeb? = null
     private var task: Job? = null
     private var lastPercent = -1
+    private var libraryOn = false
     private val failed = ArrayList<Clip>()
 
     private val countValues by lazy { resources.getIntArray(R.array.count_values) }
@@ -104,6 +104,9 @@ class MainActivity : AppCompatActivity() {
 
         findViewById<View>(R.id.tabList).setOnClickListener { showLibrary(false) }
         findViewById<View>(R.id.tabLibrary).setOnClickListener { showLibrary(true) }
+        findViewById<View>(R.id.tabOffline).setOnClickListener {
+            startActivity(Intent(this, OfflineActivity::class.java))
+        }
         findViewById<View>(R.id.clipBtn).setOnClickListener { fromClipboard() }
 
         showLoginState()
@@ -147,14 +150,26 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showLibrary(on: Boolean) {
+        libraryOn = on
         grid.visibility = if (on) View.GONE else View.VISIBLE
         libraryList.visibility = if (on) View.VISIBLE else View.GONE
         refresh.isEnabled = !on
-        if (on) {
-            val items = Library.all(this)
-            libraryList.adapter = LibraryAdapter(items) { openFile(it) }
-            if (items.isEmpty()) statusView.text = getString(R.string.library_empty)
-        }
+        if (on) refreshLibrary()
+    }
+
+    /** The folder is the truth: whatever sits in Download/TikTokGrab is what this tab shows. */
+    private fun refreshLibrary() {
+        val videos = LocalVideos.scan(this)
+        libraryList.adapter = LocalGridAdapter(videos, onOpen = { openOffline(it) }, onMenu = {
+            LocalMenu.show(this, it) { refreshLibrary() }
+        })
+        statusView.text = if (videos.isEmpty()) getString(R.string.library_empty)
+        else "${videos.size} saved · ${GridAdapter.mb(videos.sumOf { it.bytes })}"
+    }
+
+    private fun openOffline(video: LocalVideo) {
+        OfflineQueue.startUri = video.uri
+        startActivity(Intent(this, OfflineActivity::class.java))
     }
 
     private fun fromClipboard() {
@@ -170,15 +185,6 @@ class MainActivity : AppCompatActivity() {
         showLibrary(false)
         input.setText(link)
         loadList()
-    }
-
-    private fun openFile(item: LibraryItem) {
-        val intent = Intent(Intent.ACTION_VIEW).apply {
-            setDataAndType(Uri.parse(item.uri), "video/mp4")
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        }
-        runCatching { startActivity(intent) }
-            .onFailure { statusView.text = "Could not open: ${it.message}" }
     }
 
     private fun loadList() {
@@ -266,7 +272,6 @@ class MainActivity : AppCompatActivity() {
                         }
                         adapter.markSaved(result.clipId)
                         if (!result.skipped) {
-                            Library.add(this@MainActivity, clip, result.uri)
                             progress.progress = 100
                             statusView.text = "Saved → ${result.path}"
                         }
@@ -286,6 +291,7 @@ class MainActivity : AppCompatActivity() {
             } finally {
                 loadBtn.isEnabled = true
                 showSelection()
+                if (libraryOn) refreshLibrary()
             }
         }
     }
@@ -293,6 +299,7 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         showLoginState()
+        if (libraryOn) refreshLibrary()
     }
 
     override fun onDestroy() {
