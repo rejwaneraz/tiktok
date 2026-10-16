@@ -92,9 +92,12 @@ object Backup {
         stores.forEach { name ->
             val out = JSONObject()
             context.getSharedPreferences(name, Context.MODE_PRIVATE).all.forEach { (key, value) ->
-                @Suppress("UNCHECKED_CAST")
                 when (value) {
-                    is Set<*> -> out.put(key, JSONArray(value as Collection<Any>))
+                    is Set<*> -> {
+                        val items = JSONArray()
+                        value.forEach { items.put(it?.toString() ?: "") }
+                        out.put(key, items)
+                    }
                     is String -> out.put(key, value)
                     is Number -> out.put(key, value.toString())
                 }
