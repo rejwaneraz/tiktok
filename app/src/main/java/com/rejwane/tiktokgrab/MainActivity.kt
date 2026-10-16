@@ -119,6 +119,7 @@ class MainActivity : AppCompatActivity() {
         showEstimate()
         showSelection()
         showSection(LIBRARY)
+        if (intent.getBooleanExtra(CLIP_EXTRA, false)) fromClipboard()
     }
 
     private fun spanCount(): Int {
@@ -372,10 +373,13 @@ class MainActivity : AppCompatActivity() {
         if (section == LIBRARY) refreshLibrary()
     }
 
-    private companion object {
+    companion object {
         const val LIST = 0
         const val LIBRARY = 1
         const val SETTINGS = 2
+
+        /** Set by the ➕ in the offline feed: land here and grab the clipboard link. */
+        const val CLIP_EXTRA = "grab_from_clipboard"
     }
 
     override fun onDestroy() {

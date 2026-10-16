@@ -29,7 +29,7 @@ class PlayerAdapter(private val clips: List<Clip>) : RecyclerView.Adapter<Player
             ready = false
             caption.text = clip.title.ifBlank { clip.page }
             meta.text = buildString {
-                append(GridAdapter.short(clip.views)).append(" views")
+                append(GridAdapter.short(clip.stat.plays)).append(" views")
                 append(" · ").append(GridAdapter.clock(clip.duration))
                 if (clip.bytes > 0) append(" · ").append(GridAdapter.mb(clip.bytes))
             }

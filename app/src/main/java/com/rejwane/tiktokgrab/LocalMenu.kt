@@ -57,7 +57,7 @@ object LocalMenu {
             .show()
     }
 
-    private fun share(host: AppCompatActivity, clip: LocalVideo) {
+    fun share(host: AppCompatActivity, clip: LocalVideo) {
         val intent = Intent(Intent.ACTION_SEND).apply {
             type = "video/mp4"
             putExtra(Intent.EXTRA_STREAM, clip.uri)

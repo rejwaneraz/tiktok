@@ -1,11 +1,17 @@
 package com.rejwane.tiktokgrab
 
+import android.content.Intent
+import android.graphics.Typeface
 import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.text.Editable
+import android.text.TextWatcher
 import android.view.View
+import android.widget.EditText
 import android.widget.ImageView
+import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
@@ -19,10 +25,11 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * The offline half of the app. For You shuffles everything on the phone, and every folder under
- * TikTokGrab is a profile of its own — header, stats and grid laid out the way TikTok does it.
+ * The offline half of the app, shaped like TikTok: a For You shuffle, an Explore search, and one
+ * profile per folder under TikTokGrab with the same header, tabs and grid. Everything reads files
+ * already on the phone — the only network use is pulling an author's picture.
  */
-class OfflineActivity : AppCompatActivity() {
+class OfflineActivity : AppCompatActivity(), OfflineAdapter.Listener {
 
     private var videos = listOf<LocalVideo>()
     private var feed = listOf<LocalVideo>()
@@ -30,8 +37,10 @@ class OfflineActivity : AppCompatActivity() {
     private var opened: String? = null
     private var position = 0
     private var section = FEED
+    private var feedTab = FOR_YOU
     private var tab = VIDEOS
     private var order = NEWEST
+    private var scope = ALL
 
     private val tick = Handler(Looper.getMainLooper())
 
@@ -39,6 +48,10 @@ class OfflineActivity : AppCompatActivity() {
     private val counter by lazy { findViewById<TextView>(R.id.offlineCounter) }
     private val empty by lazy { findViewById<TextView>(R.id.offlineEmpty) }
     private val feedRoot by lazy { findViewById<View>(R.id.feedRoot) }
+    private val exploreRoot by lazy { findViewById<View>(R.id.exploreRoot) }
+    private val exploreQuery by lazy { findViewById<EditText>(R.id.exploreQuery) }
+    private val exploreChips by lazy { findViewById<LinearLayout>(R.id.exploreChips) }
+    private val exploreGrid by lazy { findViewById<RecyclerView>(R.id.exploreGrid) }
     private val authorList by lazy { findViewById<RecyclerView>(R.id.authorList) }
     private val profileRoot by lazy { findViewById<View>(R.id.profileRoot) }
     private val profileGrid by lazy { findViewById<RecyclerView>(R.id.profileGrid) }
@@ -63,17 +76,36 @@ class OfflineActivity : AppCompatActivity() {
         setContentView(R.layout.activity_offline)
         authorList.layoutManager = LinearLayoutManager(this)
         profileGrid.layoutManager = GridLayoutManager(this, 3)
+        exploreGrid.layoutManager = GridLayoutManager(this, 3)
         pager.orientation = ViewPager2.ORIENTATION_VERTICAL
         pager.registerOnPageChangeCallback(callback)
 
-        findViewById<View>(R.id.navBack).setOnClickListener { finish() }
-        findViewById<View>(R.id.navHome).setOnClickListener { showForYou() }
-        findViewById<View>(R.id.navProfile).setOnClickListener { showAuthors() }
-        findViewById<TextView>(R.id.profilePlay).setOnClickListener { show(profileList(), 0) }
-        findViewById<TextView>(R.id.profileSort).setOnClickListener { pickOrder() }
+        findViewById<View>(R.id.navHome).setOnClickListener { showFeed() }
+        findViewById<View>(R.id.navExplore).setOnClickListener { showExplore() }
+        findViewById<View>(R.id.navAdd).setOnClickListener { grabLink() }
+        findViewById<View>(R.id.navMe).setOnClickListener { showAuthors() }
+
+        findViewById<View>(R.id.tabForYou).setOnClickListener { pickFeedTab(FOR_YOU) }
+        findViewById<View>(R.id.tabFollowing).setOnClickListener { pickFeedTab(FOLLOWING) }
+        findViewById<View>(R.id.tabSearch).setOnClickListener { showExplore() }
+
+        findViewById<View>(R.id.profileAvatar).setOnClickListener { openPicture() }
+        findViewById<TextView>(R.id.profileFollow).setOnClickListener {
+            opened?.let { Follows.toggle(this, it); paintFollow() }
+        }
+        findViewById<TextView>(R.id.profileHi).setOnClickListener { openUrl(tiktokProfile()) }
+        findViewById<TextView>(R.id.profileMore).setOnClickListener { overflow() }
         findViewById<View>(R.id.tabVideos).setOnClickListener { pickTab(VIDEOS) }
         findViewById<View>(R.id.tabShuffle).setOnClickListener { pickTab(SHUFFLE) }
         findViewById<View>(R.id.tabLiked).setOnClickListener { pickTab(LIKED) }
+        findViewById<TextView>(R.id.tabSortCaret).setOnClickListener { pickOrder() }
+
+        exploreQuery.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) = Unit
+            override fun onTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) = Unit
+            override fun afterTextChanged(s: Editable?) = fillExplore()
+        })
+        buildChips()
 
         videos = LocalVideos.scan(this)
         val startUri = OfflineQueue.startUri
@@ -83,25 +115,142 @@ class OfflineActivity : AppCompatActivity() {
         fetchAvatars()
     }
 
-    private fun videosOf(author: String) = videos.filter { it.author == author }
+    // region the feed
 
-    private fun showForYou() = show(LocalVideos.forYou(this, videos), 0)
+    private fun feedSource() =
+        if (feedTab == FOLLOWING) videos.filter { Follows.isFollowing(this, it.author) } else videos
+
+    private fun showFeed() = show(LocalVideos.forYou(this, feedSource()), 0)
+
+    private fun pickFeedTab(which: Int) {
+        feedTab = which
+        show(LocalVideos.forYou(this, feedSource()), 0)
+    }
+
+    private fun paintFeedTabs() {
+        styleTab(R.id.tabForYou, feedTab == FOR_YOU)
+        styleTab(R.id.tabFollowing, feedTab == FOLLOWING)
+    }
+
+    private fun styleTab(id: Int, on: Boolean) {
+        val view = findViewById<TextView>(id)
+        view.setTypeface(view.typeface, if (on) Typeface.BOLD else Typeface.NORMAL)
+        view.setTextColor(getColor(if (on) R.color.on_video else R.color.on_video_muted))
+    }
 
     /** The swipe feed over one list; a negative start just means the top. */
     private fun show(list: List<LocalVideo>, start: Int) {
         section = FEED
         feed = list
         position = if (list.isEmpty()) 0 else start.coerceIn(0, list.size - 1)
-        adapter = OfflineAdapter(feed) { at -> feed.getOrNull(at)?.let { ask(it) } }.also {
+        adapter = OfflineAdapter(feed, this).also {
             it.selected = position
             pager.adapter = it
         }
         if (position > 0) pager.setCurrentItem(position, false)
-        counter.text = if (feed.isEmpty()) "0 / 0" else "${position + 1} / ${feed.size}"
+        counter.text = if (feed.isEmpty()) "" else "${position + 1} / ${feed.size}"
+        empty.setText(if (feedTab == FOLLOWING && Follows.all(this).isEmpty())
+            R.string.follow_someone else R.string.offline_empty)
         empty.visibility = if (feed.isEmpty()) View.VISIBLE else View.GONE
+        paintFeedTabs()
         draw()
         adapter?.playAt(position)
     }
+
+    override fun onLongPress(index: Int) {
+        feed.getOrNull(index)?.let { ask(it) }
+    }
+
+    override fun onOpenProfile(author: String) = showProfile(author)
+
+    override fun onOpenPage(video: LocalVideo) = openUrl(
+        if (video.clipId.isBlank()) tiktokProfile(video.author)
+        else "https://www.tiktok.com/@${video.author}/video/${video.clipId}"
+    )
+
+    override fun onShare(video: LocalVideo) = LocalMenu.share(this, video)
+
+    private fun tiktokProfile(author: String = opened ?: "") = "https://www.tiktok.com/@$author"
+
+    private fun openUrl(url: String) {
+        if (url.isBlank()) return
+        runCatching { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) }
+    }
+
+    /** The profile picture, full size — or TikTok itself when we never got the file. */
+    private fun openPicture() {
+        val author = opened ?: return
+        val file = Authors.avatarFile(this, author)
+        if (file.length() <= 0L) {
+            openUrl(tiktokProfile(author))
+            return
+        }
+        ViewerQueue.path = file.absolutePath
+        ViewerQueue.title = Authors.get(this, author).display(author)
+        startActivity(Intent(this, ImageViewerActivity::class.java))
+    }
+
+    // endregion
+
+    // region explore
+
+    private fun showExplore() {
+        section = EXPLORE
+        draw()
+        fillExplore()
+    }
+
+    private fun buildChips() {
+        exploreChips.removeAllViews()
+        val chips = listOf(
+            "All" to ALL, "Liked" to LIKED_TAB, "Collection" to COLLECTED, "Following" to FOLLOWED
+        )
+        chips.forEach { (name, which) ->
+            exploreChips.addView(chip(name, scope == which) {
+                scope = which
+                buildChips()
+                fillExplore()
+            })
+        }
+    }
+
+    private fun chip(text: String, on: Boolean, onClick: () -> Unit) = TextView(this).apply {
+        this.text = text
+        setTextColor(getColor(if (on) R.color.on_accent else R.color.muted))
+        textSize = 13f
+        setBackgroundResource(if (on) R.drawable.btn_accent else R.drawable.pill_bg)
+        setPadding(30, 14, 30, 14)
+        isSingleLine = true
+        setOnClickListener { onClick() }
+    }
+
+    private fun exploreList(): List<LocalVideo> {
+        var list = when (scope) {
+            LIKED_TAB -> Likes.liked(this, videos)
+            COLLECTED -> Collection.inCollection(this, videos)
+            FOLLOWED -> videos.filter { Follows.isFollowing(this, it.author) }
+            else -> videos
+        }
+        val query = exploreQuery.text.toString().trim().lowercase()
+        if (query.isNotBlank()) list = list.filter { video ->
+            video.caption.lowercase().contains(query) ||
+                video.author.lowercase().contains(query) ||
+                Authors.get(this, video.author).nickname.lowercase().contains(query)
+        }
+        return list
+    }
+
+    private fun fillExplore() {
+        if (section != EXPLORE) return
+        val list = exploreList()
+        exploreGrid.adapter = LocalGridAdapter(list, flat = true,
+            onOpen = { show(list, list.indexOf(it)) },
+            onMenu = { ask(it) })
+    }
+
+    // endregion
+
+    // region profiles
 
     private fun showAuthors() {
         section = AUTHORS
@@ -109,10 +258,12 @@ class OfflineActivity : AppCompatActivity() {
         draw()
     }
 
+    /** Followed authors first, then by how many videos are saved. */
     private fun rows(): List<AuthorRow> =
         videos.groupBy { it.author }.entries
             .sortedBy { it.key }
             .sortedByDescending { it.value.size }
+            .sortedByDescending { Follows.isFollowing(this, it.key) }
             .map { entry ->
                 val info = Authors.get(this, entry.key)
                 AuthorRow(
@@ -139,12 +290,57 @@ class OfflineActivity : AppCompatActivity() {
         findViewById<TextView>(R.id.profileLikes).text = number(info.likes)
         Avatars.into(findViewById<ImageView>(R.id.profileAvatar),
             Authors.avatarFile(this, author), this)
+        paintFollow()
         paintTabs()
         fillGrid()
         draw()
     }
 
-    private fun number(value: Long) = if (value > 0) GridAdapter.short(value) else "–"
+    private fun number(value: Long) = if (value > 0) GridAdapter.short(value) else "\u2013"
+
+    private fun paintFollow() {
+        val author = opened ?: return
+        val button = findViewById<TextView>(R.id.profileFollow)
+        val on = Follows.isFollowing(this, author)
+        button.text = getString(if (on) R.string.following_now else R.string.follow)
+        button.setBackgroundResource(if (on) R.drawable.btn_outline else R.drawable.btn_accent)
+        button.setTextColor(getColor(if (on) R.color.text else R.color.on_accent))
+    }
+
+    private fun overflow() {
+        val author = opened ?: return
+        val labels = arrayOf("Play all", "Shuffle play", "Open this profile on TikTok", "Delete all videos here")
+        MaterialAlertDialogBuilder(this)
+            .setTitle("@$author")
+            .setItems(labels) { _, which ->
+                when (which) {
+                    0 -> { tab = VIDEOS; paintTabs(); fillGrid(); show(profileList(), 0) }
+                    1 -> { tab = SHUFFLE; paintTabs(); fillGrid(); show(profileList(), 0) }
+                    2 -> openUrl(tiktokProfile(author))
+                    3 -> deleteAll(author)
+                }
+            }
+            .show()
+    }
+
+    private fun deleteAll(author: String) {
+        val list = videosOf(author)
+        if (list.isEmpty()) return
+        MaterialAlertDialogBuilder(this)
+            .setTitle("Delete ${list.size} videos?")
+            .setMessage("Every file in Download/TikTokGrab/$author is removed. This cannot be undone.")
+            .setNegativeButton("Keep", null)
+            .setPositiveButton("Delete all") { _, _ ->
+                lifecycleScope.launch {
+                    val gone = withContext(Dispatchers.IO) {
+                        list.filter { LocalVideos.delete(this@OfflineActivity, it) }.map { it.uri }
+                    }
+                    videos = videos.filterNot { it.uri in gone }
+                    refresh()
+                }
+            }
+            .show()
+    }
 
     private fun pickTab(which: Int) {
         tab = which
@@ -163,9 +359,9 @@ class OfflineActivity : AppCompatActivity() {
     }
 
     private fun pickOrder() {
-        val names = arrayOf("Newest first", "Oldest first", "Most played", "Caption A–Z")
+        val names = arrayOf("Newest first", "Oldest first", "Most played", "Caption A\u2013Z")
         MaterialAlertDialogBuilder(this)
-            .setTitle("Sort videos")
+            .setTitle(R.string.sort_by)
             .setSingleChoiceItems(names, order) { dialog, which ->
                 order = which
                 dialog.dismiss()
@@ -174,7 +370,9 @@ class OfflineActivity : AppCompatActivity() {
             .show()
     }
 
-    /** What the profile grid shows right now: all, shuffled, or only the ones hearted. */
+    private fun videosOf(author: String) = videos.filter { it.author == author }
+
+    /** What the profile grid shows: all, shuffled, or only the ones hearted. */
     private fun profileList(): List<LocalVideo> {
         val mine = videosOf(opened ?: return emptyList())
         return when (tab) {
@@ -186,7 +384,7 @@ class OfflineActivity : AppCompatActivity() {
 
     private fun sorted(list: List<LocalVideo>) = when (order) {
         OLD -> list.sortedBy { it.addedAt }
-        PLAYED -> list.sortedByDescending { Authors.viewCount(this, it.clipId) }
+        PLAYED -> list.sortedByDescending { ClipStats.of(this, it.clipId).plays }
         CAPTION -> list.sortedBy { it.caption.lowercase() }
         else -> list.sortedByDescending { it.addedAt }
     }
@@ -199,11 +397,25 @@ class OfflineActivity : AppCompatActivity() {
             onMenu = { ask(it) })
     }
 
+    // endregion
+
+    private fun grabLink() {
+        startActivity(Intent(this, MainActivity::class.java).putExtra(MainActivity.CLIP_EXTRA, true))
+    }
+
     private fun draw() {
         feedRoot.visibility = if (section == FEED) View.VISIBLE else View.GONE
+        exploreRoot.visibility = if (section == EXPLORE) View.VISIBLE else View.GONE
         authorList.visibility = if (section == AUTHORS) View.VISIBLE else View.GONE
         profileRoot.visibility = if (section == PROFILE) View.VISIBLE else View.GONE
+        navLabel(R.id.navHomeLabel, section == FEED)
+        navLabel(R.id.navExploreLabel, section == EXPLORE)
+        navLabel(R.id.navMeLabel, section == AUTHORS || section == PROFILE)
         if (section != FEED) adapter?.pauseAll()
+    }
+
+    private fun navLabel(id: Int, on: Boolean) {
+        findViewById<TextView>(id).setTextColor(getColor(if (on) R.color.text else R.color.muted))
     }
 
     private fun ask(clip: LocalVideo) {
@@ -222,6 +434,7 @@ class OfflineActivity : AppCompatActivity() {
     private fun refresh() {
         when (section) {
             FEED -> show(feed.filter { kept -> videos.any { it.uri == kept.uri } }, position)
+            EXPLORE -> fillExplore()
             AUTHORS -> showAuthors()
             else -> (opened ?: videos.firstOrNull()?.author)?.let { showProfile(it) }
         }
@@ -241,8 +454,9 @@ class OfflineActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        videos = LocalVideos.scan(this)
         tick.postDelayed(pulse, 400)
-        if (section == FEED) adapter?.playAt(position)
+        if (section == FEED) adapter?.playAt(position) else refresh()
     }
 
     override fun onPause() {
@@ -258,8 +472,12 @@ class OfflineActivity : AppCompatActivity() {
 
     private companion object {
         const val FEED = 0
-        const val AUTHORS = 1
-        const val PROFILE = 2
+        const val EXPLORE = 1
+        const val AUTHORS = 2
+        const val PROFILE = 3
+
+        const val FOR_YOU = 0
+        const val FOLLOWING = 1
 
         const val VIDEOS = 0
         const val SHUFFLE = 1
@@ -269,6 +487,11 @@ class OfflineActivity : AppCompatActivity() {
         const val OLD = 1
         const val PLAYED = 2
         const val CAPTION = 3
+
+        const val ALL = 0
+        const val LIKED_TAB = 1
+        const val COLLECTED = 2
+        const val FOLLOWED = 3
     }
 }
 

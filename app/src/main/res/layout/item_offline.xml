@@ -30,19 +30,125 @@
         android:layout_height="wrap_content"
         android:layout_gravity="bottom"
         android:max="100"
-        android:progressTint="@color/accent" />
+        android:progressTint="@color/on_video" />
+
+    <LinearLayout
+        android:id="@+id/rail"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom|end"
+        android:layout_marginEnd="8dp"
+        android:layout_marginBottom="72dp"
+        android:gravity="center_horizontal"
+        android:orientation="vertical">
+
+        <FrameLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content">
+
+            <ImageView
+                android:id="@+id/railAvatar"
+                android:layout_width="44dp"
+                android:layout_height="44dp"
+                android:contentDescription="@null"
+                android:src="@drawable/avatar_ring" />
+
+            <ImageView
+                android:id="@+id/railFollow"
+                android:layout_width="20dp"
+                android:layout_height="20dp"
+                android:layout_gravity="bottom|center_horizontal"
+                android:layout_marginTop="32dp"
+                android:contentDescription="@null"
+                android:src="@drawable/ic_add"
+                android:background="@drawable/dot_accent"
+                android:padding="3dp" />
+        </FrameLayout>
+
+        <ImageView
+            android:id="@+id/railLike"
+            android:layout_width="30dp"
+            android:layout_height="30dp"
+            android:layout_marginTop="18dp"
+            android:contentDescription="@null"
+            android:src="@drawable/ic_like" />
+
+        <TextView
+            android:id="@+id/railLikeCount"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:shadowColor="#80000000"
+            android:shadowRadius="4"
+            android:textColor="@color/on_video"
+            android:textSize="12sp" />
+
+        <ImageView
+            android:id="@+id/railComment"
+            android:layout_width="30dp"
+            android:layout_height="30dp"
+            android:layout_marginTop="18dp"
+            android:contentDescription="@null"
+            android:src="@drawable/ic_comment" />
+
+        <TextView
+            android:id="@+id/railCommentCount"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:shadowColor="#80000000"
+            android:shadowRadius="4"
+            android:textColor="@color/on_video"
+            android:textSize="12sp" />
+
+        <ImageView
+            android:id="@+id/railMark"
+            android:layout_width="30dp"
+            android:layout_height="30dp"
+            android:layout_marginTop="18dp"
+            android:contentDescription="@null"
+            android:src="@drawable/ic_bookmark" />
+
+        <TextView
+            android:id="@+id/railMarkCount"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:shadowColor="#80000000"
+            android:shadowRadius="4"
+            android:textColor="@color/on_video"
+            android:textSize="12sp" />
+
+        <ImageView
+            android:id="@+id/railShare"
+            android:layout_width="30dp"
+            android:layout_height="30dp"
+            android:layout_marginTop="18dp"
+            android:contentDescription="@null"
+            android:src="@drawable/ic_share" />
+
+        <TextView
+            android:id="@+id/railShareCount"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:shadowColor="#80000000"
+            android:shadowRadius="4"
+            android:textColor="@color/on_video"
+            android:textSize="12sp" />
+    </LinearLayout>
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_gravity="bottom"
-        android:layout_marginBottom="10dp"
+        android:layout_marginBottom="8dp"
         android:background="@drawable/bottom_scrim"
         android:orientation="vertical"
         android:paddingStart="14dp"
         android:paddingTop="26dp"
         android:paddingEnd="76dp"
-        android:paddingBottom="20dp">
+        android:paddingBottom="16dp">
 
         <TextView
             android:id="@+id/localAuthor"
@@ -80,45 +186,26 @@
             android:visibility="gone" />
 
         <TextView
+            android:id="@+id/localSound"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:ellipsize="marquee"
+            android:shadowColor="#80000000"
+            android:shadowRadius="4"
+            android:singleLine="true"
+            android:textColor="@color/on_video"
+            android:textSize="13sp" />
+
+        <TextView
             android:id="@+id/localMeta"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="5dp"
+            android:layout_marginTop="4dp"
             android:shadowColor="#80000000"
             android:shadowRadius="4"
             android:textColor="@color/on_video_muted"
-            android:textSize="12sp" />
-    </LinearLayout>
-
-    <LinearLayout
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_gravity="bottom|end"
-        android:layout_marginEnd="10dp"
-        android:layout_marginBottom="34dp"
-        android:gravity="center_horizontal"
-        android:orientation="vertical">
-
-        <TextView
-            android:id="@+id/localLike"
-            android:layout_width="46dp"
-            android:layout_height="46dp"
-            android:background="@drawable/play_bg"
-            android:gravity="center"
-            android:text="♡"
-            android:textColor="@color/on_video"
-            android:textSize="22sp" />
-
-        <TextView
-            android:id="@+id/localPlays"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="3dp"
-            android:shadowColor="#80000000"
-            android:shadowRadius="4"
-            android:textColor="@color/on_video"
-            android:textSize="12sp"
-            android:visibility="gone" />
+            android:textSize="11sp" />
     </LinearLayout>
 
 </FrameLayout>

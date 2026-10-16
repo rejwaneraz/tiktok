@@ -30,12 +30,16 @@ object Authors {
 
     private const val PREF = "authors"
     private const val KEY = "info"
-    private const val VIEWS = "views"
 
     private fun prefs(context: Context) = context.getSharedPreferences(PREF, Context.MODE_PRIVATE)
 
-    private fun read(context: Context) =
-        runCatching { JSONObject(prefs(context).getString(KEY, "{}")) }.getOrDefault(JSONObject())
+    private var cache: JSONObject? = null
+
+    /** Parsed once and kept — the feed and every grid cell ask for this while scrolling. */
+    private fun read(context: Context): JSONObject = synchronized(this) {
+        cache ?: runCatching { JSONObject(prefs(context).getString(KEY, "{}")) }
+            .getOrDefault(JSONObject()).also { cache = it }
+    }
 
     fun get(context: Context, user: String): AuthorInfo {
         val o = read(context).optJSONObject(user) ?: return AuthorInfo(user)
@@ -66,6 +70,7 @@ object Authors {
         if (old.length() > 0 && old.toString() == merged.toString()) return
         root.put(user, merged)
         prefs(context).edit().putString(KEY, root.toString()).apply()
+        synchronized(this) { cache = null }
     }
 
     /** The author object TikTok ships inside every item of the video list. */
@@ -132,23 +137,4 @@ object Authors {
 
     fun clearAvatars(context: Context) { authorsDir(context).deleteRecursively() }
 
-    fun saveViews(context: Context, views: Map<String, Long>) {
-        if (views.isEmpty()) return
-        val merged = JSONObject(prefs(context).getString(VIEWS, "{}"))
-        views.forEach { (id, count) -> if (id.isNotBlank()) merged.put(id, count) }
-        prefs(context).edit().putString(VIEWS, merged.toString()).apply()
-        synchronized(this) { cache = null }
-    }
-
-    private var cache: JSONObject? = null
-
-    /** Parsed once and kept — the grid asks for this for every cell it draws. */
-    fun viewCount(context: Context, clipId: String): Long {
-        if (clipId.isBlank()) return 0L
-        val table = synchronized(this) {
-            cache ?: runCatching { JSONObject(prefs(context).getString(VIEWS, "{}")) }
-                .getOrDefault(JSONObject()).also { cache = it }
-        }
-        return table.optLong(clipId)
-    }
 }

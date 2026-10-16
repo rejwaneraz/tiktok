@@ -1,0 +1,32 @@
+package com.rejwane.tiktokgrab
+
+import android.os.Bundle
+import android.view.View
+import android.widget.ImageView
+import android.widget.TextView
+import androidx.appcompat.app.AppCompatActivity
+import coil.load
+import java.io.File
+
+/** Tapping a profile picture opens it full size; tapping anywhere closes it again. */
+class ImageViewerActivity : AppCompatActivity() {
+
+    override fun onCreate(state: Bundle?) {
+        super.onCreate(state)
+        setContentView(R.layout.activity_viewer)
+        val path = ViewerQueue.path
+        if (path.isNullOrBlank()) {
+            finish()
+            return
+        }
+        findViewById<View>(R.id.viewerRoot).setOnClickListener { finish() }
+        findViewById<TextView>(R.id.viewerName).text = ViewerQueue.title
+        findViewById<ImageView>(R.id.viewerImage).load(File(path))
+        ViewerQueue.path = null
+    }
+}
+
+object ViewerQueue {
+    var path: String? = null
+    var title: String = ""
+}

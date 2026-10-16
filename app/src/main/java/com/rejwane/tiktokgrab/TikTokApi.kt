@@ -11,7 +11,7 @@ data class Clip(
     val id: String,
     val title: String,
     val duration: Int,
-    val views: Long,
+    val stat: Stat,
     val bytes: Long,
     val thumb: String,
     val play: String,
@@ -90,6 +90,21 @@ object TikTokApi {
         return candidates.maxByOrNull { it.first }?.second ?: ""
     }
 
+    /** Everything the rail shows: TikTok's own counts for this clip, plus its sound. */
+    private fun statOf(item: JSONObject): Stat {
+        val stats = item.optJSONObject("stats") ?: JSONObject()
+        val music = item.optJSONObject("music") ?: JSONObject()
+        return Stat(
+            plays = stats.optLong("playCount"),
+            likes = stats.optLong("diggCount"),
+            comments = stats.optLong("commentCount"),
+            collects = stats.optLong("collectCount"),
+            shares = stats.optLong("shareCount"),
+            sound = music.optString("title"),
+            soundAuthor = music.optString("authorName")
+        )
+    }
+
     private fun parse(context: Context, data: JSONObject, user: String): List<Clip> {
         val status = data.optInt("statusCode", 0)
         if (status != 0) throw RuntimeException("TikTok API: ${data.optString("statusMsg", "$status")}")
@@ -104,7 +119,7 @@ object TikTokApi {
                 id = item.optString("id"),
                 title = item.optString("desc").trim(),
                 duration = video.optInt("duration", item.optInt("duration")),
-                views = item.optJSONObject("stats")?.optLong("playCount") ?: 0L,
+                stat = statOf(item),
                 bytes = video.optLong("size").takeIf { it > 0 }
                     ?: video.optJSONArray("bitrateInfo")?.optJSONObject(0)?.optJSONObject("PlayAddr")?.optLong("DataSize") ?: 0L,
                 thumb = urlOf(video.opt("cover")).ifBlank { urlOf(video.opt("originCover")) },
@@ -188,7 +203,7 @@ object TikTokApi {
             for (clip in clips) {
                 if (seen.add(clip.id)) out.add(clip)
             }
-            Authors.saveViews(context, clips.associate { it.id to it.views })
+            ClipStats.save(context, clips.associate { it.id to it.stat })
             onProgress(out.size)
             if (match != null) break
             if (wantedId == null && out.size >= wanted) break

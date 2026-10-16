@@ -45,8 +45,8 @@ data class LocalVideo(
 
     /** TikTok's own play count when we were online for it; empty means fall back to the length. */
     fun badge(context: Context): String {
-        val views = Authors.viewCount(context, clipId)
-        return if (views > 0) "▶ ${GridAdapter.short(views)}" else ""
+        val plays = ClipStats.of(context, clipId).plays
+        return if (plays > 0) "▶ ${GridAdapter.short(plays)}" else ""
     }
 
     fun day(): String = SimpleDateFormat("d MMM yyyy", Locale.US).format(Date(addedAt * 1000))
