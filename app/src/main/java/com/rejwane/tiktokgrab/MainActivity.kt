@@ -382,6 +382,11 @@ class MainActivity : AppCompatActivity() {
         const val CLIP_EXTRA = "grab_from_clipboard"
     }
 
+    override fun onPause() {
+        Backup.snapshot(this)
+        super.onPause()
+    }
+
     override fun onDestroy() {
         task?.cancel()
         tikWeb?.destroy()

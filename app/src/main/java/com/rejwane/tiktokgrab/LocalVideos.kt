@@ -108,7 +108,8 @@ object LocalVideos {
         val cursor = runCatching {
             context.contentResolver.query(
                 MediaStore.Downloads.EXTERNAL_CONTENT_URI, columns,
-                "${MediaStore.MediaColumns.RELATIVE_PATH} LIKE ?",
+                "${MediaStore.MediaColumns.RELATIVE_PATH} LIKE ? AND " +
+                    "${MediaStore.MediaColumns.MIME_TYPE} LIKE 'video/%'",
                 arrayOf("Download/$ROOT/%"),
                 "${MediaStore.MediaColumns.DATE_ADDED} DESC"
             )

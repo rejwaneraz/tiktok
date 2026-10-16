@@ -114,7 +114,6 @@ class OfflineAdapter(
         private fun paint(clip: LocalVideo) {
             val context = itemView.context
             val liked = Likes.isLiked(context, clip)
-            like.setImageResource(if (liked) R.drawable.ic_liked else R.drawable.ic_like)
             tint(like, likeCount, liked, R.color.accent)
             tint(mark, markCount, Collection.has(context, clip), R.color.cyan)
         }

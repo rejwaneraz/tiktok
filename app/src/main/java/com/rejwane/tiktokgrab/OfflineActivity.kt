@@ -5,6 +5,8 @@ import android.graphics.Typeface
 import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
+import android.view.GestureDetector
+import android.view.MotionEvent
 import android.os.Looper
 import android.text.Editable
 import android.text.TextWatcher
@@ -23,6 +25,7 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlin.math.abs
 
 /**
  * The offline half of the app, shaped like TikTok: a For You shuffle, an Explore search, and one
@@ -79,6 +82,18 @@ class OfflineActivity : AppCompatActivity(), OfflineAdapter.Listener {
         exploreGrid.layoutManager = GridLayoutManager(this, 3)
         pager.orientation = ViewPager2.ORIENTATION_VERTICAL
         pager.registerOnPageChangeCallback(callback)
+
+        // TikTok moves between the top tabs with a sideways swipe; the video swipe stays vertical.
+        val sideways = GestureDetector(this, object : GestureDetector.SimpleOnGestureListener() {
+            override fun onFling(from: MotionEvent?, to: MotionEvent, vx: Float, vy: Float): Boolean {
+                if (section != FEED || from == null) return false
+                val dx = to.x - from.x
+                if (abs(dx) < 140 || abs(dx) < abs(to.y - from.y) * 2) return false
+                pickFeedTab(if (dx > 0) FOLLOWING else FOR_YOU)
+                return true
+            }
+        })
+        pager.setOnTouchListener { _, event -> sideways.onTouchEvent(event); false }
 
         findViewById<View>(R.id.navHome).setOnClickListener { showFeed() }
         findViewById<View>(R.id.navExplore).setOnClickListener { showExplore() }
@@ -462,6 +477,7 @@ class OfflineActivity : AppCompatActivity(), OfflineAdapter.Listener {
     override fun onPause() {
         tick.removeCallbacks(pulse)
         adapter?.pauseAll()
+        Backup.snapshot(this)
         super.onPause()
     }
 

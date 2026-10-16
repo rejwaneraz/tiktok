@@ -15,13 +15,16 @@ object Theme {
     const val LIGHT = 1
     const val SYSTEM = 2
 
-    fun mode(context: Context) =
-        context.getSharedPreferences("ui", Context.MODE_PRIVATE).getInt("mode", DARK)
+    fun mode(context: Context) = stored(context).toIntOrNull() ?: DARK
 
     fun set(context: Context, chosen: Int) {
-        context.getSharedPreferences("ui", Context.MODE_PRIVATE).edit().putInt("mode", chosen).apply()
+        context.getSharedPreferences("ui", Context.MODE_PRIVATE).edit()
+            .putString("mode", chosen.toString()).apply()
         apply(context)
     }
+
+    private fun stored(context: Context) =
+        context.getSharedPreferences("ui", Context.MODE_PRIVATE).getString("mode", "$DARK") ?: "$DARK"
 
     fun apply(context: Context) {
         AppCompatDelegate.setDefaultNightMode(when (mode(context)) {
@@ -41,6 +44,7 @@ object Theme {
 class App : android.app.Application() {
     override fun onCreate() {
         super.onCreate()
+        Backup.restoreIfEmpty(this)
         Theme.apply(this)
     }
 }
@@ -75,7 +79,7 @@ class SettingsAdapter(private val rows: List<SettingsAdapter.Row>) :
         out
     }
 
-    override fun getItemViewType(position: Int) = if (flat[position].section.isNotBlank()) 1 else 0
+    override fun getItemViewType(position: Int) = if (flat[position].title.isBlank()) 1 else 0
 
     override fun getItemCount() = flat.size
 
