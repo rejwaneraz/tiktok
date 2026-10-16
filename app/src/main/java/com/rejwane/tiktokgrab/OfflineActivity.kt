@@ -13,13 +13,14 @@ import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import androidx.viewpager2.widget.ViewPager2
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * The offline half of the app. For You shuffles everything that is on the phone, and every folder
- * under TikTokGrab is a profile of its own. Nothing here reads the network except an avatar pull.
+ * The offline half of the app. For You shuffles everything on the phone, and every folder under
+ * TikTokGrab is a profile of its own — header, stats and grid laid out the way TikTok does it.
  */
 class OfflineActivity : AppCompatActivity() {
 
@@ -29,6 +30,8 @@ class OfflineActivity : AppCompatActivity() {
     private var opened: String? = null
     private var position = 0
     private var section = FEED
+    private var tab = VIDEOS
+    private var order = NEWEST
 
     private val tick = Handler(Looper.getMainLooper())
 
@@ -59,16 +62,18 @@ class OfflineActivity : AppCompatActivity() {
         super.onCreate(state)
         setContentView(R.layout.activity_offline)
         authorList.layoutManager = LinearLayoutManager(this)
-        profileGrid.layoutManager = GridLayoutManager(this, columns())
+        profileGrid.layoutManager = GridLayoutManager(this, 3)
         pager.orientation = ViewPager2.ORIENTATION_VERTICAL
         pager.registerOnPageChangeCallback(callback)
 
         findViewById<View>(R.id.navBack).setOnClickListener { finish() }
         findViewById<View>(R.id.navHome).setOnClickListener { showForYou() }
         findViewById<View>(R.id.navProfile).setOnClickListener { showAuthors() }
-        findViewById<TextView>(R.id.profilePlay).setOnClickListener {
-            opened?.let { show(videosOf(it), 0) }
-        }
+        findViewById<TextView>(R.id.profilePlay).setOnClickListener { show(profileList(), 0) }
+        findViewById<TextView>(R.id.profileSort).setOnClickListener { pickOrder() }
+        findViewById<View>(R.id.tabVideos).setOnClickListener { pickTab(VIDEOS) }
+        findViewById<View>(R.id.tabShuffle).setOnClickListener { pickTab(SHUFFLE) }
+        findViewById<View>(R.id.tabLiked).setOnClickListener { pickTab(LIKED) }
 
         videos = LocalVideos.scan(this)
         val startUri = OfflineQueue.startUri
@@ -78,16 +83,11 @@ class OfflineActivity : AppCompatActivity() {
         fetchAvatars()
     }
 
-    private fun columns(): Int {
-        val dp = resources.displayMetrics.widthPixels / resources.displayMetrics.density
-        return (dp / 120).toInt().coerceIn(3, 5)
-    }
-
     private fun videosOf(author: String) = videos.filter { it.author == author }
 
     private fun showForYou() = show(LocalVideos.forYou(this, videos), 0)
 
-    /** The swipe feed over one list, starting where asked (a negative start just means the top). */
+    /** The swipe feed over one list; a negative start just means the top. */
     private fun show(list: List<LocalVideo>, start: Int) {
         section = FEED
         feed = list
@@ -129,17 +129,74 @@ class OfflineActivity : AppCompatActivity() {
         section = PROFILE
         opened = author
         val info = Authors.get(this, author)
-        val list = videosOf(author)
         findViewById<TextView>(R.id.profileName).text = info.display(author)
         findViewById<TextView>(R.id.profileHandle).text = "@$author"
-        val stats = info.statsNote()
-        findViewById<TextView>(R.id.profileStats).text = if (stats.isBlank())
-            "${list.size} saved · ${GridAdapter.mb(list.sumOf { it.bytes })}" else stats
+        val bio = findViewById<TextView>(R.id.profileBio)
+        bio.text = info.signature
+        bio.visibility = if (info.signature.isBlank()) View.GONE else View.VISIBLE
+        findViewById<TextView>(R.id.profileFollowing).text = number(info.following)
+        findViewById<TextView>(R.id.profileFollowers).text = number(info.followers)
+        findViewById<TextView>(R.id.profileLikes).text = number(info.likes)
         Avatars.into(findViewById<ImageView>(R.id.profileAvatar),
             Authors.avatarFile(this, author), this)
-        profileGrid.adapter = LocalGridAdapter(list, onOpen = { show(list, list.indexOf(it)) },
-            onMenu = { ask(it) })
+        paintTabs()
+        fillGrid()
         draw()
+    }
+
+    private fun number(value: Long) = if (value > 0) GridAdapter.short(value) else "–"
+
+    private fun pickTab(which: Int) {
+        tab = which
+        paintTabs()
+        fillGrid()
+    }
+
+    private fun paintTabs() {
+        underline(R.id.tabVideosLine, tab == VIDEOS)
+        underline(R.id.tabShuffleLine, tab == SHUFFLE)
+        underline(R.id.tabLikedLine, tab == LIKED)
+    }
+
+    private fun underline(id: Int, on: Boolean) {
+        findViewById<View>(id).visibility = if (on) View.VISIBLE else View.INVISIBLE
+    }
+
+    private fun pickOrder() {
+        val names = arrayOf("Newest first", "Oldest first", "Most played", "Caption A–Z")
+        MaterialAlertDialogBuilder(this)
+            .setTitle("Sort videos")
+            .setSingleChoiceItems(names, order) { dialog, which ->
+                order = which
+                dialog.dismiss()
+                fillGrid()
+            }
+            .show()
+    }
+
+    /** What the profile grid shows right now: all, shuffled, or only the ones hearted. */
+    private fun profileList(): List<LocalVideo> {
+        val mine = videosOf(opened ?: return emptyList())
+        return when (tab) {
+            SHUFFLE -> LocalVideos.forYou(this, mine)
+            LIKED -> Likes.liked(this, mine)
+            else -> sorted(mine)
+        }
+    }
+
+    private fun sorted(list: List<LocalVideo>) = when (order) {
+        OLD -> list.sortedBy { it.addedAt }
+        PLAYED -> list.sortedByDescending { Authors.viewCount(this, it.clipId) }
+        CAPTION -> list.sortedBy { it.caption.lowercase() }
+        else -> list.sortedByDescending { it.addedAt }
+    }
+
+    private fun fillGrid() {
+        if (opened == null) return
+        val list = profileList()
+        profileGrid.adapter = LocalGridAdapter(list, flat = true,
+            onOpen = { show(list, list.indexOf(it)) },
+            onMenu = { ask(it) })
     }
 
     private fun draw() {
@@ -203,6 +260,15 @@ class OfflineActivity : AppCompatActivity() {
         const val FEED = 0
         const val AUTHORS = 1
         const val PROFILE = 2
+
+        const val VIDEOS = 0
+        const val SHUFFLE = 1
+        const val LIKED = 2
+
+        const val NEWEST = 0
+        const val OLD = 1
+        const val PLAYED = 2
+        const val CAPTION = 3
     }
 }
 

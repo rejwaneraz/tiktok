@@ -14,10 +14,9 @@ data class AuthorInfo(
     val avatarUrl: String = "",
     val following: Long = 0L,
     val followers: Long = 0L,
-    val likes: Long = 0L
+    val likes: Long = 0L,
+    val signature: String = ""
 ) {
-    val known: Boolean get() = nickname.isNotBlank() || followers > 0L
-
     fun display(fallback: String) = nickname.ifBlank { fallback }
 
     fun statsNote(): String = if (followers == 0L && likes == 0L) "" else buildString {
@@ -38,11 +37,6 @@ object Authors {
     private fun read(context: Context) =
         runCatching { JSONObject(prefs(context).getString(KEY, "{}")) }.getOrDefault(JSONObject())
 
-    fun all(context: Context): Map<String, AuthorInfo> {
-        val root = read(context)
-        return root.keys().asSequence().associateWith { get(context, it) }
-    }
-
     fun get(context: Context, user: String): AuthorInfo {
         val o = read(context).optJSONObject(user) ?: return AuthorInfo(user)
         return AuthorInfo(
@@ -51,13 +45,14 @@ object Authors {
             avatarUrl = o.optString("avatar"),
             following = o.optLong("following"),
             followers = o.optLong("followers"),
-            likes = o.optLong("likes")
+            likes = o.optLong("likes"),
+            signature = o.optString("signature")
         )
     }
 
     /** Never lets a later, thinner answer wipe what we already knew. */
     fun put(context: Context, user: String, nickname: String = "", avatar: String = "",
-            following: Long = 0L, followers: Long = 0L, likes: Long = 0L) {
+            following: Long = 0L, followers: Long = 0L, likes: Long = 0L, signature: String = "") {
         if (user.isBlank()) return
         val root = read(context)
         val old = root.optJSONObject(user) ?: JSONObject()
@@ -67,6 +62,8 @@ object Authors {
             .put("following", maxOf(following, old.optLong("following")))
             .put("followers", maxOf(followers, old.optLong("followers")))
             .put("likes", maxOf(likes, old.optLong("likes")))
+            .put("signature", signature.ifBlank { old.optString("signature") })
+        if (old.length() > 0 && old.toString() == merged.toString()) return
         root.put(user, merged)
         prefs(context).edit().putString(KEY, root.toString()).apply()
     }
@@ -81,7 +78,8 @@ object Authors {
             avatar = urlOf(author.opt("avatarThumb")).ifBlank { urlOf(author.opt("avatarUrl")) },
             followers = stats?.optLong("followerCount") ?: 0L,
             following = stats?.optLong("followingCount") ?: 0L,
-            likes = stats?.optLong("heartCount") ?: 0L
+            likes = stats?.optLong("heartCount") ?: 0L,
+            signature = author.optString("signature")
         )
     }
 
@@ -100,7 +98,8 @@ object Authors {
                 avatar = urlOf(profile.opt("avatarThumb")).ifBlank { urlOf(profile.opt("avatarUrl")) },
                 following = stats.optLong("followingCount"),
                 followers = stats.optLong("followerCount"),
-                likes = stats.optLong("heartCount")
+                likes = stats.optLong("heartCount"),
+                signature = profile.optString("signature")
             )
         }
     }

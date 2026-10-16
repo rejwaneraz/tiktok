@@ -10,7 +10,8 @@ import androidx.recyclerview.widget.RecyclerView
 /** Local files only — no cookies, no user agent, nothing that needs a network. */
 class OfflineAdapter(
     private val clips: List<LocalVideo>,
-    private val onLongPress: (Int) -> Unit
+    private val onLongPress: (Int) -> Unit,
+    private val onLiked: () -> Unit = {}
 ) : RecyclerView.Adapter<OfflineAdapter.Holder>() {
 
     private val holders = HashMap<Int, Holder>()
@@ -26,12 +27,14 @@ class OfflineAdapter(
         val caption: TextView = view.findViewById(R.id.localCaption)
         val more: TextView = view.findViewById(R.id.localMore)
         val meta: TextView = view.findViewById(R.id.localMeta)
+        val like: TextView = view.findViewById(R.id.localLike)
+        val plays: TextView = view.findViewById(R.id.localPlays)
         var boundPosition = -1
         private var wantsPlay = false
         private var ready = false
         private var expanded = false
 
-        fun bind(clip: LocalVideo) {
+        fun bind(clip: LocalVideo, onLiked: () -> Unit) {
             ready = false
             expanded = false
             author.text = "@${clip.author}"
@@ -42,6 +45,12 @@ class OfflineAdapter(
             more.text = "See more"
             caption.setOnClickListener { toggle() }
             more.setOnClickListener { toggle() }
+            paint(clip)
+            like.setOnClickListener {
+                Likes.toggle(itemView.context, clip)
+                paint(clip)
+                onLiked()
+            }
             video.setOnPreparedListener { player ->
                 ready = true
                 player.isLooping = true
@@ -56,6 +65,16 @@ class OfflineAdapter(
             }
             video.setVideoURI(clip.uri)
             pauseIcon.visibility = View.VISIBLE
+        }
+
+        /** Heart is ours; the play count is TikTok's own, kept from when the list was read. */
+        private fun paint(clip: LocalVideo) {
+            val liked = Likes.isLiked(itemView.context, clip)
+            like.text = if (liked) "♥" else "♡"
+            like.setTextColor(itemView.context.getColor(if (liked) R.color.accent else R.color.on_video))
+            val views = Authors.viewCount(itemView.context, clip.clipId)
+            plays.text = if (views > 0) "▶ ${GridAdapter.short(views)}" else ""
+            plays.visibility = if (views > 0) View.VISIBLE else View.GONE
         }
 
         private fun toggle() {
@@ -95,7 +114,7 @@ class OfflineAdapter(
         Holder(LayoutInflater.from(parent.context).inflate(R.layout.item_offline, parent, false))
 
     override fun onBindViewHolder(holder: Holder, position: Int) {
-        clips.getOrNull(position)?.let { holder.bind(it) }
+        clips.getOrNull(position)?.let { holder.bind(it, onLiked) }
         holder.boundPosition = position
         holders[position] = holder
         if (position == selected) holder.start()

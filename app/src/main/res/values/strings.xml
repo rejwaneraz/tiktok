@@ -32,6 +32,10 @@
     <string name="nav_for_you">For You</string>
     <string name="nav_profiles">Profiles</string>
     <string name="play_all">▶ Play all</string>
+    <string name="sort_by">Sort ▾</string>
+    <string name="following">Following</string>
+    <string name="followers">Followers</string>
+    <string name="likes">Likes</string>
     <string name="move_to_profile">Move to profile</string>
     <string name="no_other_profile">No other profile to move this to yet</string>
     <string name="move_failed">Could not move the file</string>
