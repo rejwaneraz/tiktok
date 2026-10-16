@@ -105,18 +105,18 @@ object Store {
             return legacyDir(context, folder).listFiles()?.filter { it.length() > 0 }
                 ?.map { Uri.fromFile(it) } ?: emptyList()
         }
-        return runCatching {
+        val out = ArrayList<Uri>()
+        runCatching {
             context.contentResolver.query(
                 MediaStore.Downloads.EXTERNAL_CONTENT_URI, arrayOf(MediaStore.MediaColumns._ID),
                 "${MediaStore.MediaColumns.RELATIVE_PATH} LIKE ?", arrayOf("${relative(folder)}/"), null
             )?.use { c ->
-                val out = ArrayList<Uri>()
                 while (c.moveToNext()) {
-                    out += Uri.withAppendedPath(MediaStore.Downloads.EXTERNAL_CONTENT_URI, c.getLong(0).toString())
+                    out.add(Uri.withAppendedPath(MediaStore.Downloads.EXTERNAL_CONTENT_URI, c.getLong(0).toString()))
                 }
-                out
             }
-        }.getOrDefault(emptyList())
+        }
+        return out
     }
 
     private fun legacyFile(context: Context, folder: String, name: String): File? {
