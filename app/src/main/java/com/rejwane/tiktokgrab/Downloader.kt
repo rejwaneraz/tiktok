@@ -91,14 +91,32 @@ object Downloader {
                     written = w
                     if (total > 0) onPercent(w * 100f / total)
                 }
-                val (path, uri) = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q)
-                    saveScoped(context, folderFor(clip), name, response, onBytes)
-                else
-                    saveLegacy(context, folderFor(clip), name, response, onBytes)
+                val (path, uri) = when {
+                    Vault.granted(context) -> saveVault(context, clip, response, onBytes)
+                    Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q ->
+                        saveScoped(context, folderFor(clip), name, response, onBytes)
+                    else -> saveLegacy(context, folderFor(clip), name, response, onBytes)
+                }
+                // The profile is a record now, not a folder — written even for the old paths, so a
+                // later move into the library still knows who the video belongs to.
+                Vault.record(context, clip.id, clip.author, clip.title)
                 prefs(context).edit().putStringSet("ids", doneIds(context) + clip.id).apply()
                 Saved(clip.id, path, uri, written, false)
             }
         }
+    }
+
+    /** A plain file in our own library folder: no gallery, no MediaStore, no uninstall cleanup. */
+    private suspend fun saveVault(context: Context, clip: Clip, response: Response,
+                                  onBytes: (Long) -> Unit): Pair<String, String> {
+        val file = Vault.file(context, clip.title.ifBlank { "tiktok" }, clip.id)
+        try {
+            file.outputStream().use { stream(response, it, onBytes) }
+        } catch (e: Exception) {
+            runCatching { file.delete() }
+            throw e
+        }
+        return Pair(file.absolutePath, Uri.fromFile(file).toString())
     }
 
     private suspend fun saveScoped(context: Context, folder: String, name: String, response: Response,

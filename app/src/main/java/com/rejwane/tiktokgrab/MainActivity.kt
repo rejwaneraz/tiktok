@@ -127,6 +127,23 @@ class MainActivity : AppCompatActivity() {
         if (intent.getBooleanExtra(CLIP_EXTRA, false)) fromClipboard()
     }
 
+    /**
+     * Videos from the older builds sit in MediaStore, which deletes them with the app on uninstall.
+     * They are copied into our own library folder once and the row is dropped, so a reinstall from
+     * now on leaves the library exactly where it is.
+     */
+    private fun moveOldVideos() {
+        lifecycleScope.launch(Dispatchers.IO) {
+            val moved = runCatching { Vault.migrateLegacy(this@MainActivity) }.getOrDefault(0)
+            if (moved == 0) return@launch
+            Backup.snapshot(this@MainActivity)
+            withContext(Dispatchers.Main) {
+                refreshLibrary()
+                statusView.text = "Moved $moved videos into Download/TikTokGrab/${Vault.LIBRARY}"
+            }
+        }
+    }
+
     private fun spanCount(): Int {
         val dp = resources.displayMetrics.widthPixels / resources.displayMetrics.density
         return (dp / 120).toInt().coerceIn(3, 5)
@@ -188,7 +205,6 @@ class MainActivity : AppCompatActivity() {
     private fun showSettings() {
         val saved = LocalVideos.scan(this)
         val size = GridAdapter.mb(saved.sumOf { it.bytes })
-        val signed = if (Cookies.hasLogin()) "Signed in" else "Not signed in"
         settingsList.adapter = SettingsAdapter(listOf(
             SettingsAdapter.Row("Appearance", Theme.label(this), "Preferences") { pickTheme() },
             SettingsAdapter.Row("Reset For You order", "", "Feed") {
@@ -196,7 +212,22 @@ class MainActivity : AppCompatActivity() {
                 note("For You", "The order is rolled again next time you open the feed.")
             },
             SettingsAdapter.Row("Saved videos", "${saved.size}", "Storage") {
-                note("Saved videos", lines("${saved.size} videos · $size", "", "Download/TikTokGrab/<author>/"))
+                note("Saved videos", lines("${saved.size} videos · $size", "",
+                    "Download/TikTokGrab/${Vault.LIBRARY} · one folder, only this app plays them",
+                    "They stay there even after this app is uninstalled."))
+            },
+            SettingsAdapter.Row("All files access", if (Vault.granted(this)) "Granted" else "Needed", "Storage") {
+                val had = Vault.granted(this)
+                val inLibrary = Vault.list(this)
+                note("All files access", if (had)
+                    lines("Granted — videos are saved as plain files in",
+                        "Download/TikTokGrab/${Vault.LIBRARY} as *${Vault.EXT}",
+                        "", "${inLibrary.size} files · ${GridAdapter.mb(inLibrary.sumOf { it.length() })}",
+                        "A gallery will not show them and a reinstall will not take them.")
+                else lines("Turn the switch ON for TikTok Grab on the page that opens next.", "",
+                    "Without it the system stores the videos and deletes them when this app goes —",
+                    "that is what happened to the last library. The app still works either way."))
+                if (!had) Vault.requestAccess(this)
             },
             SettingsAdapter.Row("Profile pictures", "${Authors.cachedAvatars(this)} cached", "Storage") {
                 val had = Authors.cachedAvatars(this)
@@ -212,8 +243,19 @@ class MainActivity : AppCompatActivity() {
                     }
                     .show()
             },
-            SettingsAdapter.Row("Log in to TikTok", signed, "Account") {
+            SettingsAdapter.Row("Log in to TikTok", Session.label(this), "Account") {
                 loginLauncher.launch(Intent(this, LoginActivity::class.java))
+            },
+            SettingsAdapter.Row("Check the session now", Session.why(this), "Account") {
+                statusView.text = "Checking the session…"
+                lifecycleScope.launch {
+                    val reason = withContext(Dispatchers.IO) { TikTokApi.probe(this@MainActivity) }
+                    if (reason == null) Session.good(this@MainActivity) else Session.bad(this@MainActivity, reason)
+                    showLoginState()
+                    showSettings()
+                    note("Session", if (reason == null) "TikTok still answers — the session is fine."
+                    else lines("TikTok did not answer.", "", reason, "", "Use Log in to TikTok above."))
+                }
             },
             SettingsAdapter.Row("Log out", "", "Account") {
                 confirm("Log out", "This clears the TikTok session from this app.") {
@@ -401,6 +443,7 @@ class MainActivity : AppCompatActivity() {
                 }
                 val user = TikTokApi.username(result.source)
                 val clips = result.clips
+                Session.good(this@MainActivity)
                 adapter.submit(clips, Downloader.doneIds(this@MainActivity))
                 val already = clips.count { it.id in Downloader.doneIds(this@MainActivity) }
                 val savedNote = if (already > 0) " · $already already downloaded" else ""
@@ -417,6 +460,7 @@ class MainActivity : AppCompatActivity() {
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
+                Session.bad(this@MainActivity, e.message ?: "read failed")
                 statusView.text = e.message ?: "Failed"
             } finally {
                 loadBtn.isEnabled = true
@@ -489,6 +533,8 @@ class MainActivity : AppCompatActivity() {
         super.onResume()
         showLoginState()
         if (section == LIBRARY) refreshLibrary()
+        // The switch is granted on a system page, and we come back to this same screen.
+        moveOldVideos()
     }
 
     companion object {

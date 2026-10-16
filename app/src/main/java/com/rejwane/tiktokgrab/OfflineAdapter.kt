@@ -19,7 +19,7 @@ import kotlin.math.max
  * down the right edge. Local files only — no cookies, no user agent, nothing that needs a network.
  */
 class OfflineAdapter(
-    private val clips: List<LocalVideo>,
+    private var clips: List<LocalVideo>,
     private val listener: Listener
 ) : RecyclerView.Adapter<OfflineAdapter.Holder>() {
 
@@ -256,6 +256,18 @@ class OfflineAdapter(
     fun playAt(position: Int) {
         selected = position
         holders.forEach { (pos, holder) -> if (pos == position) holder.start() else holder.pause() }
+    }
+
+    /**
+     * A tab change that keeps the pager and its players: only the list underneath moves. Rebuilding
+     * the adapter instead is what made the swipe jerk and restart the video.
+     */
+    fun swap(list: List<LocalVideo>, at: Int) {
+        clips = list
+        selected = at
+        pauseAll()
+        holders.clear()
+        notifyDataSetChanged()
     }
 
     fun pauseAll() = holders.values.toList().forEach { it.pause() }

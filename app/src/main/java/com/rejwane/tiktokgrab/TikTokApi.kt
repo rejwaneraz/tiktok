@@ -171,6 +171,20 @@ object TikTokApi {
     fun clearCache(context: Context) =
         context.getSharedPreferences(PREF, Context.MODE_PRIVATE).edit().clear().apply()
 
+    /**
+     * One small page read answers the only question that matters about a session: does TikTok still
+     * reply. Null means yes; anything else is the reason to show. Blocking — call off the main thread.
+     */
+    fun probe(context: Context): String? = runCatching {
+        val prefs = context.getSharedPreferences(PREF, Context.MODE_PRIVATE)
+        val uid = prefs.all.values.filterIsInstance<String>().firstOrNull { it.startsWith("MS4w") }
+        if (uid.isNullOrBlank()) "no profile has been listed yet"
+        else {
+            val rows = JSONObject(Http.get(pageUrl(uid, ""))).optJSONArray("itemList")?.length() ?: 0
+            if (rows > 0) null else "TikTok answered with no videos"
+        }
+    }.getOrElse { it.message ?: "read failed" }.getOrElse { it.message ?: "read failed" }
+
     private fun pageUrl(uid: String, cursor: String) =
         ITEM_LIST + "?secUid=$uid&count=$PAGE&cursor=$cursor&type=1&source=0&aid=1988" +
             "&app_name=tiktok_web&device_platform=web_pc&channel=tiktok_web&cookie_enabled=true" +

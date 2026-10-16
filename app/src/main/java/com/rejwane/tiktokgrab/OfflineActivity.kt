@@ -122,14 +122,54 @@ class OfflineActivity : AppCompatActivity(), OfflineAdapter.Listener {
 
     private fun showFeed() = show(LocalVideos.forYou(this, feedSource()), 0)
 
+    /** TikTok's own sideways order: Following, For You, then the profile that is open. */
+    private fun slots(): List<Int> =
+        if (opened != null) listOf(SLOT_FOLLOWING, SLOT_FORYOU, SLOT_PROFILE)
+        else listOf(SLOT_FOLLOWING, SLOT_FORYOU)
+
+    private fun slotNow() = when {
+        section == PROFILE -> SLOT_PROFILE
+        feedTab == FOLLOWING -> SLOT_FOLLOWING
+        else -> SLOT_FORYOU
+    }
+
+    /** A sideways drag walks those few screens, and only the list underneath ever moves. */
+    override fun onSwipe(toFollowing: Boolean) {
+        val order = slots()
+        val at = order.indexOf(slotNow()).coerceAtLeast(0)
+        val step = if (toFollowing) order.size - 1 else 1
+        when (order[(at + step) % order.size]) {
+            SLOT_PROFILE -> opened?.let { showProfile(it) }
+            SLOT_FOLLOWING -> switchTab(FOLLOWING)
+            else -> switchTab(FOR_YOU)
+        }
+    }
+
     /** The top tabs and a sideways drag both land here, and neither may throw you back to video one. */
     private fun switchTab(which: Int) {
-        if (which == feedTab) return
+        if (which == feedTab && section == FEED) return
         val where = feed.getOrNull(position)
         feedTab = which
         val list = LocalVideos.forYou(this, feedSource())
         val index = where?.let { clip -> list.indexOfFirst { it.uri == clip.uri } } ?: -1
-        show(list, if (index >= 0) index else 0)
+        val at = if (index >= 0) index else 0
+        // Coming back from a profile is a section change; between tabs it must not rebuild anything.
+        if (section != FEED) show(list, at) else swapTo(list, at)
+    }
+
+    /** Changes what the feed holds without dropping the pager, so the video keeps playing. */
+    private fun swapTo(list: List<LocalVideo>, index: Int) {
+        val held = adapter ?: return show(list, index)
+        feed = list
+        position = if (list.isEmpty()) 0 else index.coerceIn(0, list.size - 1)
+        held.swap(list, position)
+        if (pager.currentItem != position) pager.setCurrentItem(position, false)
+        counter.text = if (list.isEmpty()) "" else "${position + 1} / ${list.size}"
+        empty.setText(if (feedTab == FOLLOWING && Follows.all(this).isEmpty())
+            R.string.follow_someone else R.string.offline_empty)
+        empty.visibility = if (list.isEmpty()) View.VISIBLE else View.GONE
+        paintFeedTabs()
+        pager.post { held.playAt(position) }
     }
 
     private fun paintFeedTabs() {
@@ -178,9 +218,6 @@ class OfflineActivity : AppCompatActivity(), OfflineAdapter.Listener {
     }
 
     override fun onShare(video: LocalVideo) = LocalMenu.share(this, video)
-
-    /** A sideways drag on the video swaps the top tab, the way TikTok does it. */
-    override fun onSwipe(toFollowing: Boolean) = switchTab(if (toFollowing) FOLLOWING else FOR_YOU)
 
     private fun tiktokProfile(author: String = opened ?: "") = "https://www.tiktok.com/@$author"
 
@@ -488,6 +525,11 @@ class OfflineActivity : AppCompatActivity(), OfflineAdapter.Listener {
         const val EXPLORE = 1
         const val AUTHORS = 2
         const val PROFILE = 3
+
+        // The three screens a sideways drag walks between, kept apart from the section numbers above.
+        const val SLOT_FOLLOWING = 10
+        const val SLOT_FORYOU = 11
+        const val SLOT_PROFILE = 12
 
         const val FOR_YOU = 0
         const val FOLLOWING = 1

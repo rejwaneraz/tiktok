@@ -50,7 +50,7 @@ object LocalMenu {
     private fun confirm(host: AppCompatActivity, clip: LocalVideo, onDeleted: () -> Unit) {
         MaterialAlertDialogBuilder(host)
             .setTitle("Delete this video?")
-            .setMessage("${clip.name}\n\nIt is removed from Download/TikTokGrab/${clip.author}. This cannot be undone.")
+            .setMessage("${clip.name}\n\nIt is removed from Download/TikTokGrab/${Vault.LIBRARY}. This cannot be undone.")
             .setNegativeButton("Keep", null)
             .setPositiveButton("Delete") { _, _ ->
                 if (LocalVideos.delete(host, clip)) onDeleted()
@@ -60,9 +60,10 @@ object LocalMenu {
     }
 
     fun share(host: AppCompatActivity, clip: LocalVideo) {
+        val send = outward(host, clip) ?: return note(host, "Cannot share this file")
         val intent = Intent(Intent.ACTION_SEND).apply {
             type = "video/mp4"
-            putExtra(Intent.EXTRA_STREAM, clip.uri)
+            putExtra(Intent.EXTRA_STREAM, send)
             putExtra(Intent.EXTRA_TEXT, clip.caption)
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
@@ -71,11 +72,22 @@ object LocalMenu {
     }
 
     private fun openOutside(host: AppCompatActivity, clip: LocalVideo) {
+        val send = outward(host, clip) ?: return note(host, "No player for this file")
         val intent = Intent(Intent.ACTION_VIEW).apply {
-            setDataAndType(clip.uri, "video/mp4")
+            setDataAndType(send, "video/mp4")
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
         runCatching { host.startActivity(intent) }.onFailure { note(host, "No player for this file") }
+    }
+
+    /** Other apps are not allowed a file:// address, so our own folder leaves through a provider. */
+    private fun outward(host: AppCompatActivity, clip: LocalVideo): Uri? {
+        val uri = clip.uri
+        if (uri.scheme != "file") return uri
+        val file = uri.path?.let { java.io.File(it) } ?: return null
+        return runCatching {
+            androidx.core.content.FileProvider.getUriForFile(host, "${host.packageName}.files", file)
+        }.getOrNull()
     }
 
     private fun openOnTikTok(host: AppCompatActivity, clip: LocalVideo) {

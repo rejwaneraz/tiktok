@@ -24,8 +24,9 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 
 /**
- * One downloaded video on this phone. TikTokGrab/<author>/<caption> [clipId].mp4 is the shape this
- * app writes, so the author and caption come straight off the path — no API, no network, no login.
+ * One downloaded video on this phone. New ones are plain files in Download/TikTokGrab/library named
+ * "<caption> [clipId].tgr", so the caption and the clip id come off the name and the profile comes
+ * from our own record — no API, no network, no login.
  */
 data class LocalVideo(
     val uri: Uri,
@@ -64,8 +65,27 @@ object LocalVideos {
         name.filterNot { ILLEGAL.contains(it) }.trim().trim('.').ifBlank { UNASSIGNED }
 
     fun scan(context: Context): List<LocalVideo> = runCatching {
-        (scoped(context) + legacy(context)).sortedByDescending { it.addedAt }
+        (vault(context) + scoped(context) + legacy(context)).sortedByDescending { it.addedAt }
     }.getOrDefault(emptyList())
+
+    /** The library folder itself: one place for every video, whatever the caption or the profile. */
+    private fun vault(context: Context): List<LocalVideo> {
+        if (!Vault.granted(context)) return emptyList()
+        return Vault.list(context).map { file ->
+            val clipId = Regex("\\[(\\d+)]").find(file.name)?.groupValues?.get(1) ?: ""
+            val caption = Vault.captionOf(context, clipId).ifBlank { captionOf(file.name) }
+            LocalVideo(
+                uri = Uri.fromFile(file),
+                name = file.name,
+                caption = caption,
+                clipId = clipId,
+                author = Vault.authorOf(context, clipId, ""),
+                bytes = file.length(),
+                durationMs = 0L,
+                addedAt = file.lastModified() / 1000
+            )
+        }
+    }
 
     /**
      * For You order is rolled once and then kept, so swiping back never throws you somewhere else.
@@ -123,12 +143,13 @@ object LocalVideos {
             while (c.moveToNext()) {
                 val folder = c.str(path).substringAfter("Download/$ROOT/").trim('/')
                 val rowId = c.getLong(id)
+                val clipId = Regex("\\[(\\d+)]").find(c.str(title))?.groupValues?.get(1) ?: ""
                 out.add(LocalVideo(
                     uri = Uri.withAppendedPath(MediaStore.Downloads.EXTERNAL_CONTENT_URI, rowId.toString()),
                     name = c.str(title),
                     caption = captionOf(c.str(title)),
-                    clipId = Regex("\\[(\\d+)]").find(c.str(title))?.groupValues?.get(1) ?: "",
-                    author = folder.substringBefore('/').ifBlank { UNASSIGNED },
+                    clipId = clipId,
+                    author = Vault.authorOf(context, clipId, folder.substringBefore('/')),
                     bytes = c.getLong(size),
                     durationMs = 0L,
                     addedAt = c.getLong(added)
@@ -161,8 +182,8 @@ object LocalVideos {
         }
     }
 
-    private fun captionOf(name: String) =
-        name.removeSuffix(".mp4").substringBeforeLast('[').trim().ifBlank { "Video" }
+    private fun captionOf(name: String) = name.removeSuffix(Vault.EXT).removeSuffix(".mp4")
+        .substringBeforeLast('[').trim().ifBlank { "Video" }
 
     private fun Cursor.str(column: Int) = getString(column) ?: ""
 
@@ -178,19 +199,22 @@ object LocalVideos {
     }
 
     /** Re-files a video under another author, which is how it changes profile. */
-    fun moveTo(context: Context, video: LocalVideo, author: String): Boolean = runCatching {
-        val folder = sanitize(author)
-        if (video.uri.scheme == "file") {
-            val dir = File(File(context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), ROOT), folder)
-            dir.mkdirs()
-            File(video.uri.path!!).renameTo(File(dir, video.name))
-        } else {
-            val values = ContentValues().apply {
-                put(MediaStore.MediaColumns.RELATIVE_PATH, "Download/$ROOT/$folder/")
+    fun moveTo(context: Context, video: LocalVideo, author: String): Boolean {
+        if (video.clipId.isNotBlank()) return Vault.setAuthor(context, video.clipId, author)
+        return runCatching {
+            val folder = sanitize(author)
+            if (video.uri.scheme == "file") {
+                val dir = File(Vault.dir(context), folder)
+                dir.mkdirs()
+                File(video.uri.path!!).renameTo(File(dir, video.name))
+            } else {
+                val values = ContentValues().apply {
+                    put(MediaStore.MediaColumns.RELATIVE_PATH, "Download/$ROOT/$folder/")
+                }
+                context.contentResolver.update(video.uri, values, null, null) > 0
             }
-            context.contentResolver.update(video.uri, values, null, null) > 0
-        }
-    }.getOrDefault(false)
+        }.getOrDefault(false)
+    }
 }
 
 /** A frame taken out of the file itself, so the grid also works with the network off. */
@@ -233,13 +257,13 @@ object LocalThumbs {
             retriever.setDataSource(context, video.uri)
             retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
                 ?.toLongOrNull()?.div(1000)?.toInt()?.let { durations[video.key] = it }
-            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) retriever.getFrameAtTime(3_000_000) else null
+            retriever.getFrameAtTime(3_000_000)
         }.getOrNull()
         runCatching { retriever.release() }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            runCatching {
-                return context.contentResolver.loadThumbnail(video.uri, Size(280, 400), null)
-            }
+        // The system can only hand back a picture for media it indexes itself; our own files are not
+        // indexed on purpose, so the frame always comes out of the file.
+        if (video.uri.scheme != "file" && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            runCatching { return context.contentResolver.loadThumbnail(video.uri, Size(280, 400), null) }
         }
         return fromFile
     }
