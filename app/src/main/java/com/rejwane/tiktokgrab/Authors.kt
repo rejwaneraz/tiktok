@@ -129,6 +129,10 @@ object Authors {
         return runCatching { Http.save(info.avatarUrl, file) }.getOrDefault(false)
     }
 
+    fun cachedAvatars(context: Context) = authorsDir(context).listFiles()?.size ?: 0
+
+    fun clearAvatars(context: Context) { authorsDir(context).deleteRecursively() }
+
     fun saveViews(context: Context, views: Map<String, Long>) {
         if (views.isEmpty()) return
         val merged = JSONObject(prefs(context).getString(VIEWS, "{}"))

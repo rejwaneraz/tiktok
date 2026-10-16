@@ -15,6 +15,12 @@ object Cookies {
 
     fun flush() = CookieManager.getInstance().flush()
 
+    /** Forgets the whole TikTok session. */
+    fun signOut() = CookieManager.getInstance().run {
+        removeAllCookies(null)
+        flush()
+    }
+
     /**
      * TikTok hands back a fresh msToken on every response. Only that one is stored — replacing
      * the other session cookies breaks the login.

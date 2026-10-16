@@ -11,13 +11,29 @@ android {
         applicationId = "com.rejwane.tiktokgrab"
         minSdk = 24
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0"
+        // Every CI build is numbered higher than the last, so an update is never "older".
+        versionCode = (System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 1) + 1
+        versionName = "1.${System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 1}"
+    }
+
+    /**
+     * Every CI run used to make its own debug key, so Android refused to update the installed app
+     * without uninstalling it first. This one key in the repo keeps every build upgrade-compatible.
+     */
+    signingConfigs {
+        getByName("debug") {
+            storeFile = file("../keystore/tiktokgrab.p12")
+            storePassword = "android"
+            keyAlias = "tiktokgrab"
+            keyPassword = "android"
+            storeType = "PKCS12"
+        }
     }
 
     buildTypes {
         debug {
             isMinifyEnabled = false
+            signingConfig = signingConfigs.getByName("debug")
         }
         release {
             isMinifyEnabled = false

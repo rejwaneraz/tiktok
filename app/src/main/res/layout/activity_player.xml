@@ -20,7 +20,7 @@
         android:paddingTop="3dp"
         android:paddingEnd="9dp"
         android:paddingBottom="3dp"
-        android:textColor="@color/text"
+        android:textColor="@color/on_video"
         android:textSize="12sp" />
 
     <TextView
@@ -32,7 +32,7 @@
         android:background="@drawable/play_bg"
         android:gravity="center"
         android:text="✕"
-        android:textColor="@color/text"
+        android:textColor="@color/on_video"
         android:textSize="16sp" />
 
     <LinearLayout
@@ -51,7 +51,7 @@
             android:background="@drawable/save_bg"
             android:gravity="center"
             android:text="⬇"
-            android:textColor="@color/text"
+            android:textColor="@color/on_video"
             android:textSize="20sp" />
 
         <TextView
@@ -62,7 +62,7 @@
             android:shadowColor="#80000000"
             android:shadowRadius="4"
             android:text="@string/save"
-            android:textColor="@color/text"
+            android:textColor="@color/on_video"
             android:textSize="11sp" />
     </LinearLayout>
 
@@ -78,7 +78,7 @@
         android:maxLines="1"
         android:shadowColor="#80000000"
         android:shadowRadius="4"
-        android:textColor="@color/muted"
+        android:textColor="@color/on_video_muted"
         android:textSize="12sp" />
 
 </FrameLayout>

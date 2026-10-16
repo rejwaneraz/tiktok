@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="bg">#000000</color>
+    <color name="card">#161823</color>
+    <color name="elevated">#1F2129</color>
+    <color name="stroke">#2F3140</color>
+    <color name="text">#FFFFFF</color>
+    <color name="muted">#AEB0BD</color>
+
+    <color name="accent">#FE2C55</color>
+    <color name="on_accent">#FFFFFF</color>
+    <color name="cyan">#25F4EE</color>
+    <color name="selected">#23E07A</color>
+
+    <color name="field">#1F2129</color>
+    <color name="pill">#1F2129</color>
+    <color name="ripple">#33FFFFFF</color>
+    <color name="selected_fill">#0E2A2C</color>
+
+    <color name="header_start">#161823</color>
+    <color name="header_center">#1B1E2A</color>
+    <color name="header_end">#161823</color>
+    <color name="on_video">#FFFFFF</color>
+    <color name="on_video_muted">#AEB0BD</color>
+</resources>

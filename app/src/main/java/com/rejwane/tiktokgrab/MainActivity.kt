@@ -16,10 +16,12 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.GridLayoutManager
+import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import kotlinx.coroutines.launch
 
 class MainActivity : AppCompatActivity() {
@@ -38,11 +40,12 @@ class MainActivity : AppCompatActivity() {
     private lateinit var refresh: SwipeRefreshLayout
     private lateinit var grid: RecyclerView
     private lateinit var libraryList: RecyclerView
+    private lateinit var settingsList: RecyclerView
 
     private var tikWeb: TikTokWeb? = null
     private var task: Job? = null
     private var lastPercent = -1
-    private var libraryOn = false
+    private var section = LIST
     private val failed = ArrayList<Clip>()
 
     private val countValues by lazy { resources.getIntArray(R.array.count_values) }
@@ -68,11 +71,13 @@ class MainActivity : AppCompatActivity() {
         refresh = findViewById(R.id.refresh)
         grid = findViewById(R.id.grid)
         libraryList = findViewById(R.id.library)
+        settingsList = findViewById(R.id.settings)
 
         adapter = GridAdapter(onOpen = { openPlayer(it) }, onSelectionChanged = { showSelection() })
         grid.layoutManager = GridLayoutManager(this, spanCount())
         grid.adapter = adapter
         libraryList.layoutManager = GridLayoutManager(this, spanCount())
+        settingsList.layoutManager = LinearLayoutManager(this)
 
         countPick.adapter = ArrayAdapter.createFromResource(
             this, R.array.counts, android.R.layout.simple_spinner_dropdown_item
@@ -102,8 +107,9 @@ class MainActivity : AppCompatActivity() {
         }
         retryBtn.setOnClickListener { startDownloads(ArrayList(failed)) }
 
-        findViewById<View>(R.id.tabList).setOnClickListener { showLibrary(false) }
-        findViewById<View>(R.id.tabLibrary).setOnClickListener { showLibrary(true) }
+        findViewById<View>(R.id.tabList).setOnClickListener { showSection(LIST) }
+        findViewById<View>(R.id.tabLibrary).setOnClickListener { showSection(LIBRARY) }
+        findViewById<View>(R.id.tabSettings).setOnClickListener { showSection(SETTINGS) }
         findViewById<View>(R.id.tabOffline).setOnClickListener {
             startActivity(Intent(this, OfflineActivity::class.java))
         }
@@ -112,6 +118,7 @@ class MainActivity : AppCompatActivity() {
         showLoginState()
         showEstimate()
         showSelection()
+        showSection(LIBRARY)
     }
 
     private fun spanCount(): Int {
@@ -149,13 +156,74 @@ class MainActivity : AppCompatActivity() {
         retryBtn.text = "Retry (${failed.size})"
     }
 
-    private fun showLibrary(on: Boolean) {
-        libraryOn = on
-        grid.visibility = if (on) View.GONE else View.VISIBLE
-        libraryList.visibility = if (on) View.VISIBLE else View.GONE
-        refresh.isEnabled = !on
-        if (on) refreshLibrary()
+    private fun showSection(which: Int) {
+        section = which
+        grid.visibility = if (which == LIST) View.VISIBLE else View.GONE
+        libraryList.visibility = if (which == LIBRARY) View.VISIBLE else View.GONE
+        settingsList.visibility = if (which == SETTINGS) View.VISIBLE else View.GONE
+        refresh.isEnabled = which == LIST
+        markTabs(which)
+        if (which == LIBRARY) refreshLibrary()
+        if (which == SETTINGS) showSettings()
     }
+
+    private fun markTabs(which: Int) {
+        tabLabel(R.id.tabLibraryLabel, which == LIBRARY)
+        tabLabel(R.id.tabListLabel, which == LIST)
+        tabLabel(R.id.tabSettingsLabel, which == SETTINGS)
+        tabLabel(R.id.tabOfflineLabel, false)
+    }
+
+    private fun tabLabel(id: Int, on: Boolean) {
+        findViewById<TextView>(id).setTextColor(getColor(if (on) R.color.accent else R.color.muted))
+    }
+
+    /** TikTok-shaped list: grey section captions, then rows with the current value on the right. */
+    private fun showSettings() {
+        val saved = LocalVideos.scan(this)
+        settingsList.adapter = SettingsAdapter(listOf(
+            SettingsAdapter.Row("Appearance", Theme.label(this), "Preferences") { pickTheme() },
+            SettingsAdapter.Row("Reset For You order", "", "Feed") {
+                LocalVideos.reshuffle(this)
+                statusView.text = "For You will shuffle again"
+            },
+            SettingsAdapter.Row("Saved videos", "${saved.size}", "Storage") {
+                statusView.text = "Download/TikTokGrab · ${GridAdapter.mb(saved.sumOf { it.bytes })}"
+            },
+            SettingsAdapter.Row("Profile pictures", "${Authors.cachedAvatars(this)} cached", "Storage") {
+                Authors.clearAvatars(this)
+                showSettings()
+            },
+            SettingsAdapter.Row("Log in to TikTok",
+                if (Cookies.hasLogin()) "Signed in" else "Not signed in", "Account") {
+                loginLauncher.launch(Intent(this, LoginActivity::class.java))
+            },
+            SettingsAdapter.Row("Log out", "", "Account") {
+                Cookies.signOut()
+                showLoginState()
+                statusView.text = "Signed out of TikTok"
+            },
+            SettingsAdapter.Row("Clear cached profiles", "", "Account") {
+                TikTokApi.clearCache(this)
+                statusView.text = "Profile ids cleared — list again to refresh them"
+            },
+            SettingsAdapter.Row("Version", packageVersion(), "About") {}
+        ))
+    }
+
+    private fun pickTheme() {
+        val names = arrayOf("Dark", "Light", "Follow system")
+        MaterialAlertDialogBuilder(this)
+            .setTitle("Appearance")
+            .setSingleChoiceItems(names, Theme.mode(this)) { dialog, which ->
+                Theme.set(this, which)
+                dialog.dismiss()
+            }
+            .show()
+    }
+
+    private fun packageVersion(): String =
+        runCatching { packageManager.getPackageInfo(packageName, 0).versionName }.getOrDefault("1.0")
 
     /** The folder is the truth: whatever sits in Download/TikTokGrab is what this tab shows. */
     private fun refreshLibrary() {
@@ -184,7 +252,7 @@ class MainActivity : AppCompatActivity() {
             statusView.text = "No link in clipboard"
             return
         }
-        showLibrary(false)
+        showSection(LIST)
         input.setText(link)
         loadList()
     }
@@ -204,7 +272,7 @@ class MainActivity : AppCompatActivity() {
 
         loadBtn.isEnabled = false
         refresh.isRefreshing = true
-        showLibrary(false)
+        showSection(LIST)
         statusView.text = getString(R.string.loading)
 
         task = lifecycleScope.launch {
@@ -293,7 +361,7 @@ class MainActivity : AppCompatActivity() {
             } finally {
                 loadBtn.isEnabled = true
                 showSelection()
-                if (libraryOn) refreshLibrary()
+                if (section == LIBRARY) refreshLibrary()
             }
         }
     }
@@ -301,7 +369,13 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         showLoginState()
-        if (libraryOn) refreshLibrary()
+        if (section == LIBRARY) refreshLibrary()
+    }
+
+    private companion object {
+        const val LIST = 0
+        const val LIBRARY = 1
+        const val SETTINGS = 2
     }
 
     override fun onDestroy() {

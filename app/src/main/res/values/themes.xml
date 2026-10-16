@@ -17,18 +17,27 @@
         <item name="cornerRadius">12dp</item>
     </style>
 
-    <style name="Theme.TikTokGrab" parent="Theme.Material3.Dark.NoActionBar">
+    <style name="Theme.TikTokGrab" parent="Theme.Material3.DayNight.NoActionBar">
         <item name="colorPrimary">@color/accent</item>
-        <item name="colorOnPrimary">@color/text</item>
+        <item name="colorOnPrimary">@color/on_accent</item>
+        <item name="colorSecondary">@color/cyan</item>
+        <item name="colorSurface">@color/card</item>
+        <item name="colorOnSurface">@color/text</item>
+        <item name="android:colorBackground">@color/bg</item>
         <item name="android:windowBackground">@color/bg</item>
         <item name="android:statusBarColor">@color/bg</item>
+        <item name="android:navigationBarColor">@color/bg</item>
+        <item name="android:windowLightStatusBar">@bool/light_status_bar</item>
         <item name="android:textViewStyle">@style/Widget.Grab.Text</item>
         <item name="materialButtonStyle">@style/Widget.Grab.Button</item>
         <item name="materialButtonOutlinedStyle">@style/Widget.Grab.Button.Outlined</item>
     </style>
 
+    <!-- The feed is always the dark room TikTok keeps it in, whatever the list theme is. -->
     <style name="Theme.TikTokGrab.Fullscreen" parent="Theme.TikTokGrab">
         <item name="android:windowBackground">@android:color/black</item>
         <item name="android:statusBarColor">@android:color/black</item>
+        <item name="android:navigationBarColor">@android:color/black</item>
+        <item name="android:windowLightStatusBar">false</item>
     </style>
 </resources>

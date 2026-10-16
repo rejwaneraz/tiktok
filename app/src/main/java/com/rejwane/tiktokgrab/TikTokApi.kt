@@ -152,6 +152,10 @@ object TikTokApi {
         return uid
     }
 
+    /** Cached secUids go stale when an account is renamed or made private — this forces a re-read. */
+    fun clearCache(context: Context) =
+        context.getSharedPreferences(PREF, Context.MODE_PRIVATE).edit().clear().apply()
+
     private fun pageUrl(uid: String, cursor: String) =
         ITEM_LIST + "?secUid=$uid&count=$PAGE&cursor=$cursor&type=1&source=0&aid=1988" +
             "&app_name=tiktok_web&device_platform=web_pc&channel=tiktok_web&cookie_enabled=true" +
