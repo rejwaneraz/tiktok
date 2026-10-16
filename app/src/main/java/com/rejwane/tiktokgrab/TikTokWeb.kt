@@ -58,7 +58,7 @@ class TikTokWeb(private val activity: Activity) {
         if (!url.contains("api/comment/list")) return null
         val clip = watching ?: Comments.clipIdIn(url)
         if (clip.isBlank()) return null
-        val bytes = Http.getBytes(url, request.headers.orEmpty()) ?: return emptyResponse()
+        val bytes = Http.getBytes(url, request.requestHeaders.orEmpty()) ?: return emptyResponse()
         captured = Comments.absorb(activity, clip, String(bytes, Charsets.UTF_8))
         return WebResourceResponse("application/json", "utf-8", bytes.inputStream())
     }
