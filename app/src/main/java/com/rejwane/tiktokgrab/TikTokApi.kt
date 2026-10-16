@@ -183,7 +183,7 @@ object TikTokApi {
             val rows = JSONObject(Http.get(pageUrl(uid, ""))).optJSONArray("itemList")?.length() ?: 0
             if (rows > 0) null else "TikTok answered with no videos"
         }
-    }.getOrElse { it.message ?: "read failed" }.getOrElse { it.message ?: "read failed" }
+    }.getOrElse { it.message ?: "read failed" }
 
     private fun pageUrl(uid: String, cursor: String) =
         ITEM_LIST + "?secUid=$uid&count=$PAGE&cursor=$cursor&type=1&source=0&aid=1988" +
