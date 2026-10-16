@@ -1,0 +1,52 @@
+package com.rejwane.tiktokgrab
+
+import android.content.Context
+import org.json.JSONObject
+
+/**
+ * One video, resolved without a browser. TikTok keeps its profile page behind a JavaScript check,
+ * but a single link still answers over plain HTTP through the same public reader that brings the
+ * comments — so a pasted link still works even when a profile page would not open.
+ */
+object SingleClip {
+
+    private const val BASE = "https://www.tikwm.com/api/"
+
+    fun clip(context: Context, videoId: String): Clip? {
+        if (videoId.isBlank()) return null
+        val page = "https://www.tiktok.com/@v/video/$videoId"
+        val data = runCatching {
+            JSONObject(Http.openGet("$BASE?url=$page&hd=1")).optJSONObject("data")
+        }.getOrNull() ?: return null
+        val play = data.optString("hdplay").ifBlank { data.optString("play") }.ifBlank { data.optString("wmplay") }
+        if (play.isBlank()) return null
+        val author = data.optJSONObject("author") ?: JSONObject()
+        val user = author.optString("unique_id")
+        if (user.isNotBlank()) runCatching {
+            Authors.captureItem(context, JSONObject()
+                .put("uniqueId", user)
+                .put("nickname", author.optString("nickname"))
+                .put("avatarThumb", author.optString("avatar")))
+        }
+        val music = data.optJSONObject("music") ?: JSONObject()
+        return Clip(
+            id = data.optString("id").ifBlank { videoId },
+            title = data.optString("title").trim(),
+            duration = data.optInt("duration"),
+            stat = Stat(
+                plays = data.optLong("play_count"),
+                likes = data.optLong("digg_count"),
+                comments = data.optLong("comment_count"),
+                collects = data.optLong("collect_count"),
+                shares = data.optLong("share_count"),
+                sound = music.optString("title"),
+                soundAuthor = music.optString("authorName")
+            ),
+            bytes = data.optLong("hd_size").takeIf { it > 0 } ?: data.optLong("size"),
+            thumb = data.optString("origin_cover").ifBlank { data.optString("cover") },
+            play = play,
+            page = if (user.isBlank()) page else "https://www.tiktok.com/@$user/video/$videoId",
+            author = user
+        )
+    }
+}

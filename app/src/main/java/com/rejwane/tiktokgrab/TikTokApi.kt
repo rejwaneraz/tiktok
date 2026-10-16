@@ -182,8 +182,16 @@ object TikTokApi {
         val user = username(source)
         if (user.isBlank()) throw RuntimeException("username not found")
 
-        val uid = secUid(context, web, user)
         val wantedId = Regex("/video/(\\d+)").find(source)?.groupValues?.get(1)
+        val uid = runCatching { secUid(context, web, user) }.getOrNull().orEmpty()
+        if (uid.isBlank()) {
+            // The profile page is the only thing TikTok's browser check guards, so a link that names
+            // one video can still be answered over plain HTTP instead of giving up.
+            val one = wantedId?.let { SingleClip.clip(context, it) }
+            if (one != null) return@withContext Listing(listOf(one), source, one, 1)
+            throw RuntimeException("@$user — TikTok would not open the profile page. Check the name " +
+                "is public, or log in again from Settings.")
+        }
         val wanted = if (limit <= 0) CAP else minOf(limit, CAP)
         val out = ArrayList<Clip>()
         val seen = HashSet<String>()
@@ -216,6 +224,11 @@ object TikTokApi {
         if (wantedId != null && match != null) {
             Log.d(TAG, "found single clip $wantedId in $pages pages")
             return@withContext Listing(listOf(match!!), source, match, pages)
+        }
+        if (wantedId != null) {
+            // Older clips sit past what we searched; the reader answers them by id without a search.
+            val one = SingleClip.clip(context, wantedId)
+            if (one != null) return@withContext Listing(listOf(one), source, one, pages)
         }
         if (out.isEmpty()) {
             context.getSharedPreferences(PREF, Context.MODE_PRIVATE).edit().remove("v2_$user").apply()

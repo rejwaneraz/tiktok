@@ -32,7 +32,8 @@ class TikTokWeb(private val activity: Activity) {
     private fun view(): WebView = web ?: WebView(activity).apply {
         settings.javaScriptEnabled = true
         settings.domStorageEnabled = true
-        settings.userAgentString = Http.UA
+        // The browser's own identity is kept: claiming to be desktop Chrome while the engine says
+        // otherwise is exactly what TikTok's check page then refuses to let through.
         webViewClient = object : WebViewClient() {
             // TikTok tries to jump into its own app (snssdk1233://…). Swallow it: opening the app
             // would yank the user out of ours, and the failed load would also wipe this page.
@@ -53,17 +54,28 @@ class TikTokWeb(private val activity: Activity) {
         busy = true
         try {
             withContext(Dispatchers.Main) { view().loadUrl("https://www.tiktok.com/@$user") }
-            val deadline = System.currentTimeMillis() + 30000
+            val started = System.currentTimeMillis()
+            val deadline = started + 50000
+            var nudged = false
             while (System.currentTimeMillis() < deadline) {
+                delay(900)
                 // The previous profile stays in the DOM while a load fails, so never trust stale data.
                 if (url().contains("/@$user", true) && pageData().isNotBlank()) return
-                delay(800)
+                // TikTok sometimes serves a "please wait" check first; once it has run, the same
+                // address comes back with the real page, so ask for it again instead of giving up.
+                if (!nudged && System.currentTimeMillis() - started > 18000) {
+                    nudged = true
+                    withContext(Dispatchers.Main) { view().loadUrl("https://www.tiktok.com/@$user") }
+                }
             }
-            throw RuntimeException("Could not open TikTok page (URL: ${url()}) — check internet/VPN")
+            throw RuntimeException("TikTok would not open @${user} — the page stopped at ${url()} " +
+                "(title: ${title()})")
         } finally {
             busy = false
         }
     }
+
+    fun title(): String = web?.title.orEmpty()
 
     suspend fun pageData(): String =
         eval("(document.getElementById('__UNIVERSAL_DATA_FOR_REHYDRATION__')||{}).textContent||''")
