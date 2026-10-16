@@ -50,22 +50,79 @@ object Comments {
     fun missingFor(context: Context, videos: List<LocalVideo>) =
         videos.filter { it.clipId.isNotBlank() && !has(context, it.clipId) }
 
-    fun clipIdIn(url: String): String =
-        Regex("[?&]aweme_id=(\\d+)").find(url)?.groupValues?.get(1) ?: ""
-
     /** One page of comments from the page's own request; keeps what is new, up to LIMIT. */
     fun absorb(context: Context, clipId: String, body: String): Int {
-        val kept = load(context, clipId)
         val batch = runCatching { JSONObject(body).optJSONArray("comments") }.getOrNull() ?: JSONArray()
-        if (batch.length() == 0) return kept.size
         val fresh = (0 until batch.length()).mapNotNull { i ->
             batch.optJSONObject(i)?.let { parse(context, clipId, it) }
         }
+        return merge(context, clipId, fresh)
+    }
+
+    /** How many comments a clip already holds, which is what the capture loop counts on. */
+    fun count(context: Context, clipId: String) = load(context, clipId).size
+
+    /**
+     * Comments read back off the page itself when no API reply ever passed through. Names, text,
+     * hearts and pictures are there; a time only when the page shows one.
+     */
+    fun absorbDom(context: Context, clipId: String, raw: String): Int {
+        val array = runCatching { JSONArray(raw) }.getOrDefault(JSONArray())
+        val fresh = (0 until array.length()).mapNotNull { i ->
+            val o = array.optJSONObject(i) ?: return@mapNotNull null
+            val text = o.optString("t").trim()
+            val name = o.optString("n").ifBlank { "TikTok user" }
+            if (text.length < 2) return@mapNotNull null
+            val id = "d" + (name + text).hashCode()
+            val picture = o.optString("p")
+            val saved = if (picture.startsWith("http") &&
+                Store.download(context, PHOTOS, "${clipId}_$id.jpg", picture)) "${clipId}_$id.jpg" else ""
+            Comment(
+                id = id,
+                name = name,
+                text = text,
+                seconds = stampOf(o.optString("w")),
+                likes = heartsOf(o.optString("l")),
+                photo = saved
+            )
+        }
+        return merge(context, clipId, fresh)
+    }
+
+    private fun merge(context: Context, clipId: String, fresh: List<Comment>): Int {
+        if (fresh.isEmpty()) return count(context, clipId)
         val byId = LinkedHashMap<String, Comment>()
-        (kept + fresh).forEach { if (it.id.isNotBlank() && !byId.containsKey(it.id)) byId[it.id] = it }
+        (load(context, clipId) + fresh).forEach {
+            if (it.id.isNotBlank() && !byId.containsKey(it.id)) byId[it.id] = it
+        }
         val merged = byId.values.take(LIMIT)
         save(context, clipId, merged)
         return merged.size
+    }
+
+    /** "1.2K" on the page is 1200 to us; a bare number comes through untouched. */
+    private fun heartsOf(text: String): Long {
+        val value = text.trim().uppercase().replace(",", "")
+        val number = value.takeWhile { it.isDigit() || it == '.' }.toDoubleOrNull() ?: return 0
+        val suffix = value.lastOrNull()?.takeIf { it.isLetter() }
+        return (number * when (suffix) {
+            'K' -> 1_000.0
+            'M' -> 1_000_000.0
+            'B' -> 1_000_000_000.0
+            else -> 1.0
+        }).toLong()
+    }
+
+    /** The page shows a datetime attribute, sometimes only as seconds since 1970. */
+    private fun stampOf(text: String): Long {
+        val value = text.trim()
+        if (value.isEmpty()) return 0
+        value.toLongOrNull()?.let { return if (it > 1_000_000_000_000L) it / 1000 else it }
+        val plain = value.take(19)
+        val format = runCatching {
+            java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", java.util.Locale.US)
+        }.getOrNull() ?: return 0
+        return runCatching { format.parse(plain)?.time / 1000L }.getOrDefault(0L)
     }
 
     private fun parse(context: Context, clipId: String, item: JSONObject): Comment {

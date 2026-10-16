@@ -86,8 +86,8 @@ class OfflineActivity : AppCompatActivity(), OfflineAdapter.Listener {
         findViewById<View>(R.id.navAdd).setOnClickListener { grabLink() }
         findViewById<View>(R.id.navMe).setOnClickListener { showAuthors() }
 
-        findViewById<View>(R.id.tabForYou).setOnClickListener { pickFeedTab(FOR_YOU) }
-        findViewById<View>(R.id.tabFollowing).setOnClickListener { pickFeedTab(FOLLOWING) }
+        findViewById<View>(R.id.tabForYou).setOnClickListener { switchTab(FOR_YOU) }
+        findViewById<View>(R.id.tabFollowing).setOnClickListener { switchTab(FOLLOWING) }
         findViewById<View>(R.id.tabSearch).setOnClickListener { showExplore() }
 
         findViewById<View>(R.id.profileAvatar).setOnClickListener { openPicture() }
@@ -123,9 +123,14 @@ class OfflineActivity : AppCompatActivity(), OfflineAdapter.Listener {
 
     private fun showFeed() = show(LocalVideos.forYou(this, feedSource()), 0)
 
-    private fun pickFeedTab(which: Int) {
+    /** The top tabs and a sideways drag both land here, and neither may throw you back to video one. */
+    private fun switchTab(which: Int) {
+        if (which == feedTab) return
+        val where = feed.getOrNull(position)
         feedTab = which
-        show(LocalVideos.forYou(this, feedSource()), 0)
+        val list = LocalVideos.forYou(this, feedSource())
+        val index = where?.let { clip -> list.indexOfFirst { it.uri == clip.uri } } ?: -1
+        show(list, if (index >= 0) index else 0)
     }
 
     private fun paintFeedTabs() {
@@ -180,7 +185,7 @@ class OfflineActivity : AppCompatActivity(), OfflineAdapter.Listener {
     override fun onShare(video: LocalVideo) = LocalMenu.share(this, video)
 
     /** A sideways drag on the video swaps the top tab, the way TikTok does it. */
-    override fun onSwipe(toFollowing: Boolean) = pickFeedTab(if (toFollowing) FOLLOWING else FOR_YOU)
+    override fun onSwipe(toFollowing: Boolean) = switchTab(if (toFollowing) FOLLOWING else FOR_YOU)
 
     private fun tiktokProfile(author: String = opened ?: "") = "https://www.tiktok.com/@$author"
 

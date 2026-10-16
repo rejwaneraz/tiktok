@@ -12,6 +12,7 @@ import android.widget.ProgressBar
 import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
 import kotlin.math.abs
+import kotlin.math.max
 
 /**
  * The swipe feed, laid out the way TikTok does it: caption and sound bottom-left, the action rail
@@ -62,6 +63,7 @@ class OfflineAdapter(
         private var lastBurst = 0L
         private var downX = 0f
         private var downY = 0f
+        private var strayed = 0f
         private val tapper = GestureDetector(itemView.context,
             object : GestureDetector.SimpleOnGestureListener() {
                 override fun onDoubleTap(event: MotionEvent): Boolean {
@@ -73,6 +75,7 @@ class OfflineAdapter(
         fun bind(clip: LocalVideo, listener: Listener) {
             val context = itemView.context
             val info = Authors.get(context, clip.author)
+            current = clip
             ready = false
             expanded = false
             author.text = "@${info.display(clip.author)}"
@@ -131,20 +134,26 @@ class OfflineAdapter(
          * The page root is the view that actually owns the touch stream — VideoView declines it and
          * ViewPager2 is only a wrapper around its own list — so both the double tap and the
          * sideways tab swipe have to be read here, not on the pager.
+         *
+         * A CANCEL means the list has taken the gesture to move to the next video, so it is never a
+         * sideways swipe, and the drag must stay near flat to count as one at all.
          */
         fun watch(listener: Listener) {
             itemView.setOnTouchListener { _, event ->
                 tapper.onTouchEvent(event)
                 when (event.actionMasked) {
                     MotionEvent.ACTION_DOWN -> {
-                        downX = event.x; downY = event.y
+                        downX = event.x; downY = event.y; strayed = 0f
                     }
-                    MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    MotionEvent.ACTION_MOVE ->
+                        strayed = max(strayed, abs(event.y - downY))
+                    MotionEvent.ACTION_UP -> {
                         val dx = event.x - downX
-                        val dy = event.y - downY
-                        val edge = 90 * itemView.resources.displayMetrics.density
-                        if (abs(dx) > edge && abs(dx) > abs(dy) * 1.5f) listener.onSwipe(dx > 0)
+                        val edge = 130 * itemView.resources.displayMetrics.density
+                        if (abs(dx) > edge && strayed < 45 * itemView.resources.displayMetrics.density)
+                            listener.onSwipe(dx > 0)
                     }
+                    else -> Unit
                 }
                 false
             }

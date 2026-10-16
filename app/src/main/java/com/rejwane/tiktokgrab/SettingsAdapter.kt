@@ -44,6 +44,7 @@ object Theme {
 class App : android.app.Application() {
     override fun onCreate() {
         super.onCreate()
+        CrashRecorder.install(this)
         Backup.restoreIfEmpty(this)
         Theme.apply(this)
     }

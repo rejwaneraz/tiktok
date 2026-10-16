@@ -38,31 +38,6 @@ object Http {
     fun finalUrl(url: String): String =
         client.newCall(request(url)).execute().use { response -> response.request.url.toString() }
 
-    /** Headers OkHttp must own itself, or the reply arrives compressed/we send a wrong length. */
-    private val hopByHop =
-        setOf("host", "connection", "content-length", "transfer-encoding", "accept-encoding")
-
-    /**
-     * Replays a request the WebView itself was asked to make — same URL, same headers, so any
-     * signature TikTok put in that URL stays valid for us too.
-     */
-    fun getBytes(url: String, headers: Map<String, String>): ByteArray? = runCatching {
-        val builder = Request.Builder().url(url)
-        headers.forEach { (key, value) ->
-            val name = key.lowercase()
-            if (name !in hopByHop && name != "cookie" && value.isNotBlank()) builder.header(key, value)
-        }
-        // Our own jar is the one the user signed in to; the WebView's copy may not have it.
-        val cookie = Cookies.header().ifBlank {
-            headers.entries.firstOrNull { it.key.equals("cookie", true) }?.value.orEmpty()
-        }
-        if (cookie.isNotBlank()) builder.header("Cookie", cookie)
-        client.newCall(builder.build()).execute().use { response ->
-            if (!response.isSuccessful) return@use null
-            response.body?.bytes()
-        }
-    }.getOrNull()
-
     /** Pulls one small binary — an author's avatar — straight onto disk. */
     fun save(url: String, dest: java.io.File): Boolean {
         val call = Request.Builder().url(url).header("User-Agent", UA).build()

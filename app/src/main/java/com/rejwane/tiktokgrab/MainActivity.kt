@@ -230,6 +230,13 @@ class MainActivity : AppCompatActivity() {
             },
             SettingsAdapter.Row("Fetch comments for saved videos",
                 "${Comments.stored(this)} of ${saved.size} clips", "Backup") { fetchComments(saved) },
+            SettingsAdapter.Row("Comment requests", "${linesOf(commentLog()).size} URLs", "Backup") {
+                val log = commentLog()
+                note("What the page asked for",
+                    if (log.isBlank()) lines("Nothing has been tried yet.",
+                        "", "Open a video's comments once and come back here.")
+                    else log.take(4000))
+            },
             SettingsAdapter.Row("Back up now", "", "Backup") {
                 Backup.snapshot(this)
                 note("Backed up", lines("Records written to", "Download/TikTokGrab/Backup/meta"))
@@ -240,11 +247,31 @@ class MainActivity : AppCompatActivity() {
                     note("Restored", "Reopen a tab to see it.")
                 }
             },
+            SettingsAdapter.Row("Crash report",
+                if (CrashRecorder.text(this).isBlank()) "none" else "recorded", "About") {
+                val log = CrashRecorder.text(this)
+                if (log.isBlank()) note("Crash report", lines("Nothing has been recorded yet.",
+                    "", "If the app stops again, open this row and read me what it says."))
+                else MaterialAlertDialogBuilder(this)
+                    .setTitle("Last crash")
+                    .setMessage(log.take(4000))
+                    .setNegativeButton("Close", null)
+                    .setNeutralButton("Clear") { _, _ ->
+                        CrashRecorder.forget(this)
+                        showSettings()
+                    }
+                    .show()
+            },
             SettingsAdapter.Row("Version", packageVersion(), "About") {
                 note("TikTok Grab", lines("Version ${packageVersion()}", "Built for one person's own library."))
             }
         ))
     }
+
+    /** Every comment URL the hidden page ever asked for, kept in Download so it can be read back. */
+    private fun commentLog(): String = Store.readText(this, "logs", "weblog.txt").orEmpty()
+
+    private fun linesOf(text: String) = text.lineSequence().filter { it.isNotBlank() }.toList()
 
     private fun lines(vararg parts: String) = parts.joinToString("\n")
 
