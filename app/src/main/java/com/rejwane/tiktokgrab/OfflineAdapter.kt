@@ -26,6 +26,7 @@ class OfflineAdapter(
         fun onOpenProfile(author: String)
         fun onComments(video: LocalVideo)
         fun onShare(video: LocalVideo)
+        fun onSwipe(toFollowing: Boolean)
     }
 
     private val holders = HashMap<Int, Holder>()

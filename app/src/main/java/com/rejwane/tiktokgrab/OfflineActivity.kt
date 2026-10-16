@@ -43,6 +43,7 @@ class OfflineActivity : AppCompatActivity(), OfflineAdapter.Listener {
     private var tab = VIDEOS
     private var order = NEWEST
     private var scope = ALL
+    private var browser: TikTokWeb? = null
 
     private val tick = Handler(Looper.getMainLooper())
 
@@ -184,8 +185,18 @@ class OfflineActivity : AppCompatActivity(), OfflineAdapter.Listener {
 
     override fun onOpenProfile(author: String) = showProfile(author)
 
-    /** Comments open inside the app, from the file saved at download time. */
-    override fun onComments(video: LocalVideo) = CommentSheet.show(this, video)
+    /** Comments open inside the app, from the file we saved the last time they were fetched. */
+    override fun onComments(video: LocalVideo) = CommentSheet.show(this, video) { pull -> pullComments(pull) }
+
+    /** One page load, and the page hands over its own signed comment responses as it goes. */
+    private suspend fun pullComments(video: LocalVideo): Int {
+        if (video.clipId.isBlank() || !Cookies.hasLogin()) return 0
+        val page = "https://www.tiktok.com/@${video.author}/video/${video.clipId}"
+        val web = browser ?: TikTokWeb(this).also { browser = it }
+        val got = web.captureComments(page, video.clipId)
+        Backup.snapshot(this)
+        return got
+    }
 
     override fun onShare(video: LocalVideo) = LocalMenu.share(this, video)
 
@@ -487,6 +498,8 @@ class OfflineActivity : AppCompatActivity(), OfflineAdapter.Listener {
 
     override fun onDestroy() {
         adapter = null
+        browser?.destroy()
+        browser = null
         super.onDestroy()
     }
 

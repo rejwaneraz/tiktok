@@ -8,9 +8,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import androidx.viewpager2.widget.ViewPager2
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.withContext
 import kotlinx.coroutines.launch
 
 /** TikTok-style vertical feed: swipe up/down to move between videos, ⬇ saves the current one. */
@@ -97,12 +95,6 @@ class PlayerActivity : AppCompatActivity() {
                     status.text = "Downloading… ${percent.toInt()}%"
                 }
                 status.text = if (result.skipped) "Already downloaded" else "Saved → ${result.path}"
-                if (!result.skipped && clip.id.isNotBlank()) {
-                    val notes = withContext(Dispatchers.IO) {
-                        runCatching { Comments.fetch(this@PlayerActivity, clip.id) }.getOrDefault(emptyList())
-                    }.size
-                    status.text = "Saved → ${result.path} · $notes comments"
-                }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {

@@ -20,9 +20,7 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.withContext
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import kotlinx.coroutines.launch
 
@@ -274,32 +272,48 @@ class MainActivity : AppCompatActivity() {
             .show()
     }
 
-    /** Pulls the first 100 comments for every saved clip that has none yet. */
+    /**
+     * Comments can only come from the page itself, so this opens each video in the hidden WebView —
+     * about 0.8 MB per video, which is why it asks first and can be stopped with the back button.
+     */
     private fun fetchComments(saved: List<LocalVideo>) {
         val missing = Comments.missingFor(this, saved)
         if (missing.isEmpty()) {
-            statusView.text = "Every saved video already has its comments"
+            note("Comments", "Every saved video already has its comments.")
             return
         }
         if (!Cookies.hasLogin()) {
-            statusView.text = getString(R.string.need_login)
+            note("Comments", getString(R.string.comments_need_login))
             return
         }
+        val megabytes = missing.size * 8 / 10
+        MaterialAlertDialogBuilder(this)
+            .setTitle("Fetch ${missing.size} comment sets?")
+            .setMessage(lines("Each video's TikTok page is opened once in the background, roughly " +
+                "$megabytes MB for all ${missing.size} of them.", "",
+                "You can stop with the back button."))
+            .setNegativeButton("Not now", null)
+            .setPositiveButton("Fetch") { _, _ -> pullComments(missing) }
+            .show()
+    }
+
+    private fun pullComments(missing: List<LocalVideo>) {
         commentTask?.cancel()
         commentTask = lifecycleScope.launch {
             var done = 0
+            var silent = 0
             missing.forEach { video ->
-                val got = withContext(Dispatchers.IO) {
-                    runCatching { Comments.fetch(this@MainActivity, video.clipId) }.getOrDefault(emptyList())
-                }.size
+                val page = "https://www.tiktok.com/@${video.author}/video/${video.clipId}"
+                val web = tikWeb ?: TikTokWeb(this@MainActivity).also { tikWeb = it }
+                val got = runCatching { web.captureComments(page, video.clipId) }.getOrDefault(0)
                 done++
-                statusView.text = "Comments $done/${missing.size} · $got saved"
-                if (done == missing.size) {
-                    note("Comments", if (got > 0) "Saved for this one." else
-                        "TikTok sent nothing back — its comment API needs a signature this app cannot make.")
-                }
+                if (got == 0) silent++
+                statusView.text = "Comments $done/${missing.size}"
             }
+            Backup.snapshot(this@MainActivity)
             showSettings()
+            note("Comments", "$done of ${missing.size} saved" +
+                if (silent == 0) "" else ", $silent sent nothing back")
         }
     }
 
@@ -425,12 +439,6 @@ class MainActivity : AppCompatActivity() {
                         if (!result.skipped) {
                             progress.progress = 100
                             statusView.text = "Saved → ${result.path}"
-                            val notes = withContext(Dispatchers.IO) {
-                                runCatching { Comments.fetch(this@MainActivity, clip.id) }
-                                    .getOrDefault(emptyList())
-                            }.size
-                            statusView.text = if (notes > 0) "Saved → ${result.path} · $notes comments"
-                            else "Saved → ${result.path}"
                         }
                     } catch (e: CancellationException) {
                         throw e

@@ -12,9 +12,7 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import coil.load
 import com.google.android.material.bottomsheet.BottomSheetDialog
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 /**
  * The comments sheet, filled from the file we saved at download time — so it works with no signal.
@@ -22,7 +20,7 @@ import kotlinx.coroutines.withContext
  */
 object CommentSheet {
 
-    fun show(host: AppCompatActivity, video: LocalVideo) {
+    fun show(host: AppCompatActivity, video: LocalVideo, pull: suspend (LocalVideo) -> Int) {
         val view = LayoutInflater.from(host).inflate(R.layout.sheet_comments, null)
         val title = view.findViewById<TextView>(R.id.commentsTitle)
         val list = view.findViewById<RecyclerView>(R.id.commentsList)
@@ -53,8 +51,9 @@ object CommentSheet {
             else -> {
                 paint(saved, host.getString(R.string.comments_loading))
                 host.lifecycleScope.launch {
-                    val got = withContext(Dispatchers.IO) { Comments.fetch(host, video.clipId) }
-                    paint(got, if (got.isEmpty()) host.getString(R.string.comments_none) else "")
+                    val got = runCatching { pull(video) }.getOrDefault(0)
+                    val kept = Comments.load(host, video.clipId)
+                    paint(kept, if (got == 0 && kept.isEmpty()) host.getString(R.string.comments_none) else "")
                 }
             }
         }

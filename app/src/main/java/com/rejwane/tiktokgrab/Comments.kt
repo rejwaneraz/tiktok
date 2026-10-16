@@ -18,14 +18,15 @@ data class Comment(
 }
 
 /**
- * The first 100 comments of a clip, pulled while we are online anyway and kept as a file, so the
- * sheet works on a plane. TikTok's web comment endpoint takes the same session as the video list.
+ * TikTok guards its comment API behind a browser signature, so we never call it ourselves: the
+ * video page inside our hidden WebView asks for its own comments and we keep a copy of what it is
+ * given (see TikTokWeb.captureComments). Each clip's set is one JSON file under Backup, so a
+ * reinstall cannot take it.
  */
 object Comments {
 
     private const val FOLDER = "comments"
     private const val PHOTOS = "photos"
-    private const val BASE = "https://www.tiktok.com/api/comment/list/"
     const val LIMIT = 100
 
     fun load(context: Context, clipId: String): List<Comment> {
@@ -39,47 +40,44 @@ object Comments {
         }
     }
 
-    fun has(context: Context, clipId: String) = clipId.isNotBlank() && Store.exists(context, FOLDER, "$clipId.json")
+    fun has(context: Context, clipId: String) =
+        clipId.isNotBlank() && Store.exists(context, FOLDER, "$clipId.json")
 
-    /** Empty on purpose is a real answer — the caller then says so instead of retrying forever. */
-    fun fetch(context: Context, clipId: String): List<Comment> {
-        if (clipId.isBlank()) return emptyList()
-        val out = ArrayList<Comment>()
-        var cursor = ""
-        var guard = 0
-        while (out.size < LIMIT && guard < 12) {
-            guard++
-            val json = runCatching { JSONObject(Http.get(page(clipId, cursor))) }.getOrNull() ?: break
-            val batch = json.optJSONArray("comments") ?: JSONArray()
-            for (i in 0 until batch.length()) {
-                val item = batch.optJSONObject(i) ?: continue
-                if (out.size >= LIMIT) break
-                out += parse(context, clipId, item)
-            }
-            val more = json.optBoolean("has_more") || json.optString("has_more") == "1"
-            cursor = json.optString("cursor").ifBlank { cursor }
-            if (batch.length() == 0 || !more) break
+    /** How many clips already have a comment file. */
+    fun stored(context: Context) = Store.count(context, FOLDER)
+
+    /** Videos we saved before comments were captured — Settings can fetch these one by one. */
+    fun missingFor(context: Context, videos: List<LocalVideo>) =
+        videos.filter { it.clipId.isNotBlank() && !has(context, it.clipId) }
+
+    fun clipIdIn(url: String): String =
+        Regex("[?&]aweme_id=(\\d+)").find(url)?.groupValues?.get(1) ?: ""
+
+    /** One page of comments from the page's own request; keeps what is new, up to LIMIT. */
+    fun absorb(context: Context, clipId: String, body: String): Int {
+        val kept = load(context, clipId)
+        val batch = runCatching { JSONObject(body).optJSONArray("comments") }.getOrNull() ?: JSONArray()
+        if (batch.length() == 0) return kept.size
+        val fresh = (0 until batch.length()).mapNotNull { i ->
+            batch.optJSONObject(i)?.let { parse(context, clipId, it) }
         }
-        if (out.isNotEmpty()) save(context, clipId, out)
-        return out
+        val byId = LinkedHashMap<String, Comment>()
+        (kept + fresh).forEach { if (it.id.isNotBlank() && !byId.containsKey(it.id)) byId[it.id] = it }
+        val merged = byId.values.take(LIMIT)
+        save(context, clipId, merged)
+        return merged.size
     }
-
-    private fun page(clipId: String, cursor: String) =
-        BASE + "?aweme_id=$clipId&count=20&cursor=$cursor&aid=1988&app_name=tiktok_web" +
-            "&device_platform=web_pc&cookie_enabled=true&channel=tiktok_web&os=windows" +
-            "&language=en&msToken=" + Regex("msToken=([^;]+)").find(Cookies.header())?.groupValues?.get(1).orEmpty()
 
     private fun parse(context: Context, clipId: String, item: JSONObject): Comment {
         val user = item.optJSONObject("user") ?: JSONObject()
         val id = item.optString("cid").ifBlank { item.optString("comment_id") }
-        val photo = photoOf(context, clipId, id, item)
         return Comment(
             id = id,
             name = user.optString("nickname").ifBlank { "TikTok user" },
             text = item.optString("text").trim(),
             seconds = item.optLong("createTime"),
             likes = item.optLong("diggCount", item.optLong("likeCount")),
-            photo = photo,
+            photo = photoOf(context, clipId, id, item),
             replies = item.optInt("replyCount")
         )
     }
@@ -108,11 +106,4 @@ object Comments {
         }
         Store.writeText(context, FOLDER, "$clipId.json", array.toString())
     }
-
-    /** How many clips already have a comment file. */
-    fun stored(context: Context) = Store.count(context, FOLDER)
-
-    /** The first 100 for a clip we saved earlier but never pulled comments for. */
-    fun missingFor(context: Context, videos: List<LocalVideo>) =
-        videos.filter { it.clipId.isNotBlank() && !has(context, it.clipId) }
 }

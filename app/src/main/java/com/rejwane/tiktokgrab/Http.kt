@@ -38,6 +38,24 @@ object Http {
     fun finalUrl(url: String): String =
         client.newCall(request(url)).execute().use { response -> response.request.url.toString() }
 
+    /**
+     * Replays a request the WebView itself was asked to make — same URL, same headers, so any
+     * signature TikTok put in that URL stays valid for us too.
+     */
+    fun getBytes(url: String, headers: Map<String, String>): ByteArray? {
+        val builder = Request.Builder().url(url)
+        headers.forEach { (key, value) -> if (!key.equals("cookie", true)) builder.header(key, value) }
+        val cookie = headers.entries.firstOrNull { it.key.equals("cookie", true) }?.value
+            ?: Cookies.header()
+        if (cookie.isNotBlank()) builder.header("Cookie", cookie)
+        return runCatching {
+            client.newCall(builder.build()).execute().use { response ->
+                if (!response.isSuccessful) return@use null
+                response.body?.bytes()
+            }
+        }.getOrNull()
+    }
+
     /** Pulls one small binary — an author's avatar — straight onto disk. */
     fun save(url: String, dest: java.io.File): Boolean {
         val call = Request.Builder().url(url).header("User-Agent", UA).build()
