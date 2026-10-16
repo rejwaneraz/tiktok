@@ -168,10 +168,14 @@ object LocalVideos {
 
     private fun Cursor.index(column: String) = getColumnIndexOrThrow(column)
 
-    fun delete(context: Context, video: LocalVideo): Boolean = runCatching {
-        if (video.uri.scheme == "file") File(video.uri.path!!).delete()
-        else context.contentResolver.delete(video.uri, null, null) > 0
-    }.getOrDefault(false)
+    fun delete(context: Context, video: LocalVideo): Boolean {
+        val gone = runCatching {
+            if (video.uri.scheme == "file") File(video.uri.path!!).delete()
+            else context.contentResolver.delete(video.uri, null, null) > 0
+        }.getOrDefault(false)
+        if (gone) Downloader.forget(context, video.clipId)
+        return gone
+    }
 
     /** Re-files a video under another author, which is how it changes profile. */
     fun moveTo(context: Context, video: LocalVideo, author: String): Boolean = runCatching {

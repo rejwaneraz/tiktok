@@ -5,7 +5,6 @@ import android.graphics.Typeface
 import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
-import android.view.GestureDetector
 import android.view.MotionEvent
 import android.os.Looper
 import android.text.Editable
@@ -83,17 +82,24 @@ class OfflineActivity : AppCompatActivity(), OfflineAdapter.Listener {
         pager.orientation = ViewPager2.ORIENTATION_VERTICAL
         pager.registerOnPageChangeCallback(callback)
 
-        // TikTok moves between the top tabs with a sideways swipe; the video swipe stays vertical.
-        val sideways = GestureDetector(this, object : GestureDetector.SimpleOnGestureListener() {
-            override fun onFling(from: MotionEvent?, to: MotionEvent, vx: Float, vy: Float): Boolean {
-                if (section != FEED || from == null) return false
-                val dx = to.x - from.x
-                if (abs(dx) < 140 || abs(dx) < abs(to.y - from.y) * 2) return false
-                pickFeedTab(if (dx > 0) FOLLOWING else FOR_YOU)
-                return true
+        // TikTok moves between the top tabs sideways. A fling needs speed nobody uses with a
+        // thumb, so the drag itself is measured: past 90dp sideways and the tab changes.
+        val edge = 90 * resources.displayMetrics.density
+        var downX = 0f
+        var downY = 0f
+        pager.setOnTouchListener { _, event ->
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    downX = event.x; downY = event.y
+                }
+                MotionEvent.ACTION_UP -> if (section == FEED) {
+                    val dx = event.x - downX
+                    val dy = event.y - downY
+                    if (abs(dx) > edge && abs(dx) > abs(dy) * 1.6f) pickFeedTab(if (dx > 0) FOLLOWING else FOR_YOU)
+                }
             }
-        })
-        pager.setOnTouchListener { _, event -> sideways.onTouchEvent(event); false }
+            false
+        }
 
         findViewById<View>(R.id.navHome).setOnClickListener { showFeed() }
         findViewById<View>(R.id.navExplore).setOnClickListener { showExplore() }

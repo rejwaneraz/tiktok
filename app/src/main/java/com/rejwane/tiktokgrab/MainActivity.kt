@@ -185,47 +185,89 @@ class MainActivity : AppCompatActivity() {
     /** TikTok-shaped list: grey section captions, then rows with the current value on the right. */
     private fun showSettings() {
         val saved = LocalVideos.scan(this)
+        val size = GridAdapter.mb(saved.sumOf { it.bytes })
+        val signed = if (Cookies.hasLogin()) "Signed in" else "Not signed in"
         settingsList.adapter = SettingsAdapter(listOf(
             SettingsAdapter.Row("Appearance", Theme.label(this), "Preferences") { pickTheme() },
             SettingsAdapter.Row("Reset For You order", "", "Feed") {
                 LocalVideos.reshuffle(this)
-                statusView.text = "For You will shuffle again"
+                note("For You", "The order is rolled again next time you open the feed.")
             },
             SettingsAdapter.Row("Saved videos", "${saved.size}", "Storage") {
-                statusView.text = "Download/TikTokGrab · ${GridAdapter.mb(saved.sumOf { it.bytes })}"
+                note("Saved videos", "${saved.size} videos · $size
+
+Download/TikTokGrab/<author>/")
             },
             SettingsAdapter.Row("Profile pictures", "${Authors.cachedAvatars(this)} cached", "Storage") {
-                Authors.clearAvatars(this)
-                showSettings()
+                val had = Authors.cachedAvatars(this)
+                MaterialAlertDialogBuilder(this)
+                    .setTitle("Profile pictures")
+                    .setMessage("$had pictures are kept in Download/TikTokGrab/Backup/avatars.
+
+Clear them? They are fetched again when you are online.")
+                    .setNegativeButton("Keep", null)
+                    .setPositiveButton("Clear") { _, _ ->
+                        Authors.clearAvatars(this)
+                        showSettings()
+                        note("Profile pictures", "Cleared.")
+                    }
+                    .show()
             },
-            SettingsAdapter.Row("Log in to TikTok",
-                if (Cookies.hasLogin()) "Signed in" else "Not signed in", "Account") {
+            SettingsAdapter.Row("Log in to TikTok", signed, "Account") {
                 loginLauncher.launch(Intent(this, LoginActivity::class.java))
             },
             SettingsAdapter.Row("Log out", "", "Account") {
-                Cookies.signOut()
-                showLoginState()
-                statusView.text = "Signed out of TikTok"
+                confirm("Log out", "This clears the TikTok session from this app.") {
+                    Cookies.signOut()
+                    showLoginState()
+                    note("Logged out", "The TikTok session is cleared from this app.")
+                }
             },
             SettingsAdapter.Row("Clear cached profiles", "", "Account") {
                 TikTokApi.clearCache(this)
-                statusView.text = "Profile ids cleared — list again to refresh them"
+                note("Cached profiles", "Cleared — the next list read refreshes them from TikTok.")
             },
             SettingsAdapter.Row("Saved in Downloads", "${Backup.recordCount(this)} files", "Backup") {
-                statusView.text = "Download/TikTokGrab/Backup · comments, pictures, records"
+                note("Backup folder", "Download/TikTokGrab/Backup
+
+" +
+                    "${Comments.stored(this)} comment files
+" +
+                    "${Authors.cachedAvatars(this)} profile pictures
+" +
+                    "1 records file")
             },
             SettingsAdapter.Row("Fetch comments for saved videos",
                 "${Comments.stored(this)} of ${saved.size} clips", "Backup") { fetchComments(saved) },
             SettingsAdapter.Row("Back up now", "", "Backup") {
                 Backup.snapshot(this)
-                statusView.text = "Backup written to Download/TikTokGrab/Backup"
+                note("Backed up", "Records written to
+Download/TikTokGrab/Backup/meta")
             },
             SettingsAdapter.Row("Restore from backup", "", "Backup") {
-                Backup.restore(this, force = true)
-                statusView.text = "Restored — reopen the tab to see it"
+                confirm("Restore", "This replaces what is on the phone with the file in Download/TikTokGrab/Backup.") {
+                    Backup.restore(this, force = true)
+                    note("Restored", "Reopen a tab to see it.")
+                }
             },
-            SettingsAdapter.Row("Version", packageVersion(), "About") {}
+            SettingsAdapter.Row("Version", packageVersion(), "About") {
+                note("TikTok Grab", "Version ${packageVersion()}
+Built for one person's own library.")
+            }
         ))
+    }
+
+    private fun note(title: String, message: String) {
+        MaterialAlertDialogBuilder(this).setTitle(title).setMessage(message).setPositiveButton("OK", null).show()
+    }
+
+    private fun confirm(title: String, message: String, onYes: () -> Unit) {
+        MaterialAlertDialogBuilder(this)
+            .setTitle(title)
+            .setMessage(message)
+            .setNegativeButton("Cancel", null)
+            .setPositiveButton("Do it") { _, _ -> onYes() }
+            .show()
     }
 
     private fun pickTheme() {
@@ -259,6 +301,10 @@ class MainActivity : AppCompatActivity() {
                 }.size
                 done++
                 statusView.text = "Comments $done/${missing.size} · $got saved"
+                if (done == missing.size) {
+                    note("Comments", if (got > 0) "Saved for this one." else
+                        "TikTok sent nothing back — its comment API needs a signature this app cannot make.")
+                }
             }
             showSettings()
         }
@@ -390,7 +436,8 @@ class MainActivity : AppCompatActivity() {
                                 runCatching { Comments.fetch(this@MainActivity, clip.id) }
                                     .getOrDefault(emptyList())
                             }.size
-                            statusView.text = "Saved → ${result.path} · $notes comments"
+                            statusView.text = if (notes > 0) "Saved → ${result.path} · $notes comments"
+                            else "Saved → ${result.path}"
                         }
                     } catch (e: CancellationException) {
                         throw e

@@ -1,8 +1,12 @@
 package com.rejwane.tiktokgrab
 
+import android.os.SystemClock
+import android.view.GestureDetector
 import android.view.LayoutInflater
+import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
+import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.ProgressBar
 import android.widget.TextView
@@ -52,6 +56,15 @@ class OfflineAdapter(
         private var wantsPlay = false
         private var ready = false
         private var expanded = false
+        private var current: LocalVideo? = null
+        private var lastBurst = 0L
+        private val tapper = GestureDetector(itemView.context,
+            object : GestureDetector.SimpleOnGestureListener() {
+                override fun onDoubleTap(event: MotionEvent): Boolean {
+                    current?.let { burst(it, event.x, event.y) }
+                    return true
+                }
+            })
 
         fun bind(clip: LocalVideo, listener: Listener) {
             val context = itemView.context
@@ -107,7 +120,33 @@ class OfflineAdapter(
                 true
             }
             video.setVideoURI(clip.uri)
+            video.setOnTouchListener { _, event -> tapper.onTouchEvent(event); false }
             pauseIcon.visibility = View.VISIBLE
+        }
+
+        /** TikTok's double tap: the video is hearted and a heart pops where the finger landed. */
+        private fun burst(clip: LocalVideo, x: Float, y: Float) {
+            lastBurst = SystemClock.uptimeMillis()
+            if (!Likes.isLiked(itemView.context, clip)) {
+                Likes.toggle(itemView.context, clip)
+                paint(clip)
+            }
+            val heart = TextView(itemView.context).apply {
+                text = "❤"
+                textSize = 58f
+                setTextColor(context.getColor(R.color.accent))
+                translationX = x - 40f
+                translationY = y - 60f
+            }
+            (itemView as FrameLayout).addView(heart)
+            heart.animate().scaleX(1.4f).scaleY(1.4f).alpha(0f).setDuration(650L).withEndAction {
+                (itemView as FrameLayout).removeView(heart)
+            }.start()
+        }
+
+        fun onTap() {
+            if (SystemClock.uptimeMillis() - lastBurst < 400) return
+            playOrPause()
         }
 
         /** Hearts and bookmarks are ours; the numbers beside them are TikTok's own. */
@@ -168,7 +207,7 @@ class OfflineAdapter(
             listener.onLongPress(holder.bindingAdapterPosition)
             true
         }
-        holder.itemView.setOnClickListener { holder.playOrPause() }
+        holder.itemView.setOnClickListener { holder.onTap() }
     }
 
     override fun onViewRecycled(holder: Holder) {

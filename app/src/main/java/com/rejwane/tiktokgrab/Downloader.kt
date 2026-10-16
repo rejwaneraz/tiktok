@@ -38,6 +38,14 @@ object Downloader {
 
     fun doneIds(context: Context) = prefs(context).getStringSet("ids", emptySet()) ?: emptySet()
 
+    /** Deleting the file must not leave the clip marked as downloaded forever. */
+    fun forget(context: Context, clipId: String) {
+        if (clipId.isBlank() || clipId !in doneIds(context)) return
+        val kept = HashSet(doneIds(context))
+        kept.remove(clipId)
+        prefs(context).edit().putStringSet("ids", kept).apply()
+    }
+
     private fun fileName(clip: Clip): String {
         val title = clip.title.filterNot { ILLEGAL.contains(it) }.take(50).trim()
         return "${if (title.isBlank()) "tiktok" else title} [${clip.id}].mp4"
