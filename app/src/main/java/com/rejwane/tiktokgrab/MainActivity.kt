@@ -194,17 +194,14 @@ class MainActivity : AppCompatActivity() {
                 note("For You", "The order is rolled again next time you open the feed.")
             },
             SettingsAdapter.Row("Saved videos", "${saved.size}", "Storage") {
-                note("Saved videos", "${saved.size} videos · $size
-
-Download/TikTokGrab/<author>/")
+                note("Saved videos", lines("${saved.size} videos · $size", "", "Download/TikTokGrab/<author>/"))
             },
             SettingsAdapter.Row("Profile pictures", "${Authors.cachedAvatars(this)} cached", "Storage") {
                 val had = Authors.cachedAvatars(this)
                 MaterialAlertDialogBuilder(this)
                     .setTitle("Profile pictures")
-                    .setMessage("$had pictures are kept in Download/TikTokGrab/Backup/avatars.
-
-Clear them? They are fetched again when you are online.")
+                    .setMessage(lines("$had pictures are kept in Download/TikTokGrab/Backup/avatars.",
+                        "", "Clear them? They are fetched again when you are online."))
                     .setNegativeButton("Keep", null)
                     .setPositiveButton("Clear") { _, _ ->
                         Authors.clearAvatars(this)
@@ -228,21 +225,16 @@ Clear them? They are fetched again when you are online.")
                 note("Cached profiles", "Cleared — the next list read refreshes them from TikTok.")
             },
             SettingsAdapter.Row("Saved in Downloads", "${Backup.recordCount(this)} files", "Backup") {
-                note("Backup folder", "Download/TikTokGrab/Backup
-
-" +
-                    "${Comments.stored(this)} comment files
-" +
-                    "${Authors.cachedAvatars(this)} profile pictures
-" +
-                    "1 records file")
+                note("Backup folder", lines("Download/TikTokGrab/Backup", "",
+                    "${Comments.stored(this)} comment files",
+                    "${Authors.cachedAvatars(this)} profile pictures",
+                    "1 records file"))
             },
             SettingsAdapter.Row("Fetch comments for saved videos",
                 "${Comments.stored(this)} of ${saved.size} clips", "Backup") { fetchComments(saved) },
             SettingsAdapter.Row("Back up now", "", "Backup") {
                 Backup.snapshot(this)
-                note("Backed up", "Records written to
-Download/TikTokGrab/Backup/meta")
+                note("Backed up", lines("Records written to", "Download/TikTokGrab/Backup/meta"))
             },
             SettingsAdapter.Row("Restore from backup", "", "Backup") {
                 confirm("Restore", "This replaces what is on the phone with the file in Download/TikTokGrab/Backup.") {
@@ -251,11 +243,12 @@ Download/TikTokGrab/Backup/meta")
                 }
             },
             SettingsAdapter.Row("Version", packageVersion(), "About") {
-                note("TikTok Grab", "Version ${packageVersion()}
-Built for one person's own library.")
+                note("TikTok Grab", lines("Version ${packageVersion()}", "Built for one person's own library."))
             }
         ))
     }
+
+    private fun lines(vararg parts: String) = parts.joinToString("\n")
 
     private fun note(title: String, message: String) {
         MaterialAlertDialogBuilder(this).setTitle(title).setMessage(message).setPositiveButton("OK", null).show()
