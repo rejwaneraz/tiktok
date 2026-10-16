@@ -122,7 +122,7 @@ object Comments {
         val format = runCatching {
             java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", java.util.Locale.US)
         }.getOrNull() ?: return 0
-        return runCatching { format.parse(plain)?.time / 1000L }.getOrDefault(0L)
+        return runCatching { (format.parse(plain)?.time ?: 0L) / 1000L }.getOrDefault(0L)
     }
 
     private fun parse(context: Context, clipId: String, item: JSONObject): Comment {
