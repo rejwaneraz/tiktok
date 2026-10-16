@@ -11,6 +11,7 @@ import android.widget.ImageView
 import android.widget.ProgressBar
 import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
+import kotlin.math.abs
 
 /**
  * The swipe feed, laid out the way TikTok does it: caption and sound bottom-left, the action rail
@@ -59,6 +60,8 @@ class OfflineAdapter(
         private var expanded = false
         private var current: LocalVideo? = null
         private var lastBurst = 0L
+        private var downX = 0f
+        private var downY = 0f
         private val tapper = GestureDetector(itemView.context,
             object : GestureDetector.SimpleOnGestureListener() {
                 override fun onDoubleTap(event: MotionEvent): Boolean {
@@ -121,8 +124,30 @@ class OfflineAdapter(
                 true
             }
             video.setVideoURI(clip.uri)
-            video.setOnTouchListener { _, event -> tapper.onTouchEvent(event); false }
             pauseIcon.visibility = View.VISIBLE
+        }
+
+        /**
+         * The page root is the view that actually owns the touch stream — VideoView declines it and
+         * ViewPager2 is only a wrapper around its own list — so both the double tap and the
+         * sideways tab swipe have to be read here, not on the pager.
+         */
+        fun watch(listener: Listener) {
+            itemView.setOnTouchListener { _, event ->
+                tapper.onTouchEvent(event)
+                when (event.actionMasked) {
+                    MotionEvent.ACTION_DOWN -> {
+                        downX = event.x; downY = event.y
+                    }
+                    MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                        val dx = event.x - downX
+                        val dy = event.y - downY
+                        val edge = 90 * itemView.resources.displayMetrics.density
+                        if (abs(dx) > edge && abs(dx) > abs(dy) * 1.5f) listener.onSwipe(dx > 0)
+                    }
+                }
+                false
+            }
         }
 
         /** TikTok's double tap: the video is hearted and a heart pops where the finger landed. */
@@ -209,6 +234,7 @@ class OfflineAdapter(
             true
         }
         holder.itemView.setOnClickListener { holder.onTap() }
+        holder.watch(listener)
     }
 
     override fun onViewRecycled(holder: Holder) {

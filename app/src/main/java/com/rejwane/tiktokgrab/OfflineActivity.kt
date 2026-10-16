@@ -5,7 +5,6 @@ import android.graphics.Typeface
 import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
-import android.view.MotionEvent
 import android.os.Looper
 import android.text.Editable
 import android.text.TextWatcher
@@ -24,7 +23,6 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kotlin.math.abs
 
 /**
  * The offline half of the app, shaped like TikTok: a For You shuffle, an Explore search, and one
@@ -82,25 +80,6 @@ class OfflineActivity : AppCompatActivity(), OfflineAdapter.Listener {
         exploreGrid.layoutManager = GridLayoutManager(this, 3)
         pager.orientation = ViewPager2.ORIENTATION_VERTICAL
         pager.registerOnPageChangeCallback(callback)
-
-        // TikTok moves between the top tabs sideways. A fling needs speed nobody uses with a
-        // thumb, so the drag itself is measured: past 90dp sideways and the tab changes.
-        val edge = 90 * resources.displayMetrics.density
-        var downX = 0f
-        var downY = 0f
-        pager.setOnTouchListener { _, event ->
-            when (event.actionMasked) {
-                MotionEvent.ACTION_DOWN -> {
-                    downX = event.x; downY = event.y
-                }
-                MotionEvent.ACTION_UP -> if (section == FEED) {
-                    val dx = event.x - downX
-                    val dy = event.y - downY
-                    if (abs(dx) > edge && abs(dx) > abs(dy) * 1.6f) pickFeedTab(if (dx > 0) FOLLOWING else FOR_YOU)
-                }
-            }
-            false
-        }
 
         findViewById<View>(R.id.navHome).setOnClickListener { showFeed() }
         findViewById<View>(R.id.navExplore).setOnClickListener { showExplore() }
@@ -199,6 +178,9 @@ class OfflineActivity : AppCompatActivity(), OfflineAdapter.Listener {
     }
 
     override fun onShare(video: LocalVideo) = LocalMenu.share(this, video)
+
+    /** A sideways drag on the video swaps the top tab, the way TikTok does it. */
+    override fun onSwipe(toFollowing: Boolean) = pickFeedTab(if (toFollowing) FOLLOWING else FOR_YOU)
 
     private fun tiktokProfile(author: String = opened ?: "") = "https://www.tiktok.com/@$author"
 
