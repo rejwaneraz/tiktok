@@ -10,8 +10,7 @@ import androidx.recyclerview.widget.RecyclerView
 /** Local files only — no cookies, no user agent, nothing that needs a network. */
 class OfflineAdapter(
     private val clips: List<LocalVideo>,
-    private val onLongPress: (Int) -> Unit,
-    private val onLiked: () -> Unit = {}
+    private val onLongPress: (Int) -> Unit
 ) : RecyclerView.Adapter<OfflineAdapter.Holder>() {
 
     private val holders = HashMap<Int, Holder>()
@@ -34,7 +33,7 @@ class OfflineAdapter(
         private var ready = false
         private var expanded = false
 
-        fun bind(clip: LocalVideo, onLiked: () -> Unit) {
+        fun bind(clip: LocalVideo) {
             ready = false
             expanded = false
             author.text = "@${clip.author}"
@@ -49,7 +48,6 @@ class OfflineAdapter(
             like.setOnClickListener {
                 Likes.toggle(itemView.context, clip)
                 paint(clip)
-                onLiked()
             }
             video.setOnPreparedListener { player ->
                 ready = true
@@ -114,7 +112,7 @@ class OfflineAdapter(
         Holder(LayoutInflater.from(parent.context).inflate(R.layout.item_offline, parent, false))
 
     override fun onBindViewHolder(holder: Holder, position: Int) {
-        clips.getOrNull(position)?.let { holder.bind(it, onLiked) }
+        clips.getOrNull(position)?.let { holder.bind(it) }
         holder.boundPosition = position
         holders[position] = holder
         if (position == selected) holder.start()
