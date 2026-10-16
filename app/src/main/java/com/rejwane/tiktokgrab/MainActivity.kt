@@ -20,7 +20,9 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.withContext
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import kotlinx.coroutines.launch
 
@@ -44,6 +46,7 @@ class MainActivity : AppCompatActivity() {
 
     private var tikWeb: TikTokWeb? = null
     private var task: Job? = null
+    private var commentTask: Job? = null
     private var lastPercent = -1
     private var section = LIST
     private val failed = ArrayList<Clip>()
@@ -208,6 +211,19 @@ class MainActivity : AppCompatActivity() {
                 TikTokApi.clearCache(this)
                 statusView.text = "Profile ids cleared — list again to refresh them"
             },
+            SettingsAdapter.Row("Saved in Downloads", "${Backup.recordCount(this)} files", "Backup") {
+                statusView.text = "Download/TikTokGrab/Backup · comments, pictures, records"
+            },
+            SettingsAdapter.Row("Fetch comments for saved videos",
+                "${Comments.stored(this)} of ${saved.size} clips", "Backup") { fetchComments(saved) },
+            SettingsAdapter.Row("Back up now", "", "Backup") {
+                Backup.snapshot(this)
+                statusView.text = "Backup written to Download/TikTokGrab/Backup"
+            },
+            SettingsAdapter.Row("Restore from backup", "", "Backup") {
+                Backup.restore(this, force = true)
+                statusView.text = "Restored — reopen the tab to see it"
+            },
             SettingsAdapter.Row("Version", packageVersion(), "About") {}
         ))
     }
@@ -221,6 +237,31 @@ class MainActivity : AppCompatActivity() {
                 dialog.dismiss()
             }
             .show()
+    }
+
+    /** Pulls the first 100 comments for every saved clip that has none yet. */
+    private fun fetchComments(saved: List<LocalVideo>) {
+        val missing = Comments.missingFor(this, saved)
+        if (missing.isEmpty()) {
+            statusView.text = "Every saved video already has its comments"
+            return
+        }
+        if (!Cookies.hasLogin()) {
+            statusView.text = getString(R.string.need_login)
+            return
+        }
+        commentTask?.cancel()
+        commentTask = lifecycleScope.launch {
+            var done = 0
+            missing.forEach { video ->
+                val got = withContext(Dispatchers.IO) {
+                    runCatching { Comments.fetch(this@MainActivity, video.clipId) }.getOrDefault(emptyList())
+                }.size
+                done++
+                statusView.text = "Comments $done/${missing.size} · $got saved"
+            }
+            showSettings()
+        }
     }
 
     private fun packageVersion(): String =
@@ -345,6 +386,11 @@ class MainActivity : AppCompatActivity() {
                         if (!result.skipped) {
                             progress.progress = 100
                             statusView.text = "Saved → ${result.path}"
+                            val notes = withContext(Dispatchers.IO) {
+                                runCatching { Comments.fetch(this@MainActivity, clip.id) }
+                                    .getOrDefault(emptyList())
+                            }.size
+                            statusView.text = "Saved → ${result.path} · $notes comments"
                         }
                     } catch (e: CancellationException) {
                         throw e

@@ -43,6 +43,15 @@
     <string name="nav_me">Me</string>
     <string name="search_hint">Search captions, authors</string>
     <string name="follow_someone">Follow someone to fill this feed</string>
+    <string name="reply">Reply</string>
+    <string name="comments_suffix">comments</string>
+    <string name="comments_loading">Loading comments…</string>
+    <string name="comments_none">No comments were saved for this video. Download it again, or use Settings → Fetch comments.</string>
+    <string name="comments_no_id">This file was not downloaded by the app, so its comments were never saved.</string>
+    <string name="comments_need_login">Log in first — comments come from TikTok while you are online.</string>
+    <string name="fetch_comments">Fetch comments for saved videos</string>
+    <string name="backup_now">Back up now</string>
+    <string name="restore_now">Restore from backup</string>
     <string name="nothing_here">Nothing here yet</string>
     <string name="following">Following</string>
     <string name="followers">Followers</string>

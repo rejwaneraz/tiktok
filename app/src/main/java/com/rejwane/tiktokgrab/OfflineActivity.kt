@@ -178,10 +178,8 @@ class OfflineActivity : AppCompatActivity(), OfflineAdapter.Listener {
 
     override fun onOpenProfile(author: String) = showProfile(author)
 
-    override fun onOpenPage(video: LocalVideo) = openUrl(
-        if (video.clipId.isBlank()) tiktokProfile(video.author)
-        else "https://www.tiktok.com/@${video.author}/video/${video.clipId}"
-    )
+    /** Comments open inside the app, from the file saved at download time. */
+    override fun onComments(video: LocalVideo) = CommentSheet.show(this, video)
 
     override fun onShare(video: LocalVideo) = LocalMenu.share(this, video)
 
@@ -195,12 +193,12 @@ class OfflineActivity : AppCompatActivity(), OfflineAdapter.Listener {
     /** The profile picture, full size — or TikTok itself when we never got the file. */
     private fun openPicture() {
         val author = opened ?: return
-        val file = Authors.avatarFile(this, author)
-        if (file.length() <= 0L) {
+        val picture = Authors.avatarUri(this, author, big = true)
+        if (picture == null) {
             openUrl(tiktokProfile(author))
             return
         }
-        ViewerQueue.path = file.absolutePath
+        ViewerQueue.uri = picture
         ViewerQueue.title = Authors.get(this, author).display(author)
         startActivity(Intent(this, ImageViewerActivity::class.java))
     }
@@ -286,7 +284,7 @@ class OfflineActivity : AppCompatActivity(), OfflineAdapter.Listener {
                     nickname = info.display(entry.key),
                     count = entry.value.size,
                     bytes = entry.value.sumOf { it.bytes },
-                    avatar = Authors.avatarFile(this, entry.key),
+                    avatar = Authors.avatarUri(this, entry.key),
                     stats = info.statsNote()
                 )
             }
@@ -304,7 +302,7 @@ class OfflineActivity : AppCompatActivity(), OfflineAdapter.Listener {
         findViewById<TextView>(R.id.profileFollowers).text = number(info.followers)
         findViewById<TextView>(R.id.profileLikes).text = number(info.likes)
         Avatars.into(findViewById<ImageView>(R.id.profileAvatar),
-            Authors.avatarFile(this, author), this)
+            Authors.avatarUri(this, author, big = true), this)
         paintFollow()
         paintTabs()
         fillGrid()

@@ -20,7 +20,7 @@ class OfflineAdapter(
     interface Listener {
         fun onLongPress(index: Int)
         fun onOpenProfile(author: String)
-        fun onOpenPage(video: LocalVideo)
+        fun onComments(video: LocalVideo)
         fun onShare(video: LocalVideo)
     }
 
@@ -76,7 +76,7 @@ class OfflineAdapter(
             markCount.text = count(stat.collects)
             shareCount.text = "Share"
 
-            Avatars.into(avatar, Authors.avatarFile(context, clip.author), context)
+            Avatars.into(avatar, Authors.avatarUri(context, clip.author), context)
             avatar.setOnClickListener { listener.onOpenProfile(clip.author) }
             follow.visibility = if (Follows.isFollowing(context, clip.author)) View.GONE else View.VISIBLE
             follow.setOnClickListener {
@@ -91,7 +91,7 @@ class OfflineAdapter(
                 Collection.toggle(context, clip)
                 paint(clip)
             }
-            comment.setOnClickListener { listener.onOpenPage(clip) }
+            comment.setOnClickListener { listener.onComments(clip) }
             share.setOnClickListener { listener.onShare(clip) }
 
             video.setOnPreparedListener { mp ->

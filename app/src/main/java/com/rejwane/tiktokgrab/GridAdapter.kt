@@ -129,6 +129,21 @@ class GridAdapter(
             else -> n.toString()
         }
 
+        /** TikTok's own shorthand: 7m, 19h, 1d, 2w, 1y. */
+        fun ago(seconds: Long): String {
+            if (seconds <= 0) return ""
+            val age = (System.currentTimeMillis() / 1000 - seconds).coerceAtLeast(0)
+            val day = 86400L
+            return when {
+                age < 60 -> "${age}s ago"
+                age < 3600 -> "${age / 60}m ago"
+                age < day -> "${age / 3600}h ago"
+                age < day * 30 -> "${age / day}d ago"
+                age < day * 365 -> "${age / (day * 30)}w ago"
+                else -> "${age / (day * 365)}y ago"
+            }
+        }
+
         fun mb(bytes: Long) = when {
             bytes >= 1_000_000 -> "%.1f MB".format(bytes / 1_000_000.0)
             bytes >= 1_000 -> "%.0f KB".format(bytes / 1000.0)

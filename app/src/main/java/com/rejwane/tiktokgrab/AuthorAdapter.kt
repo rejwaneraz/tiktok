@@ -1,5 +1,7 @@
 package com.rejwane.tiktokgrab
 
+import android.content.Context
+import android.net.Uri
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -8,7 +10,6 @@ import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
 import coil.load
 import coil.transform.CircleCropTransformation
-import java.io.File
 
 /** One folder under TikTokGrab, shown as a profile. */
 data class AuthorRow(
@@ -16,7 +17,7 @@ data class AuthorRow(
     val nickname: String,
     val count: Int,
     val bytes: Long,
-    val avatar: File,
+    val avatar: Uri?,
     val stats: String
 ) {
     fun name() = nickname.ifBlank { user }
@@ -56,12 +57,12 @@ class AuthorAdapter(
     }
 }
 
-/** Cached avatar file if there is one, the plain ring otherwise — never a network wait on the UI thread. */
+/** The cached picture when we have one, the plain ring otherwise — never a wait on the UI thread. */
 object Avatars {
 
-    fun into(target: ImageView, file: File, context: android.content.Context) {
-        if (file.length() > 0) {
-            target.load(file) {
+    fun into(target: ImageView, avatar: Uri?, context: Context) {
+        if (avatar != null) {
+            target.load(avatar) {
                 crossfade(false)
                 placeholder(R.drawable.avatar_ring)
                 transformations(CircleCropTransformation())

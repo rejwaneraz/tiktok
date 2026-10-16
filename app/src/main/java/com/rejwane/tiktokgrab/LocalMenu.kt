@@ -3,6 +3,7 @@ package com.rejwane.tiktokgrab
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Intent
+import android.net.Uri
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
@@ -12,8 +13,8 @@ object LocalMenu {
 
     fun show(host: AppCompatActivity, clip: LocalVideo, profiles: List<String>,
              onDeleted: () -> Unit, onMoved: () -> Unit) {
-        val labels = arrayOf("Delete", "Share", "Play in another app", "Copy file name",
-            "Move to profile")
+        val labels = arrayOf("Delete", "Share", "Play in another app", "Open on TikTok",
+            "Copy file name", "Move to profile")
         MaterialAlertDialogBuilder(host)
             .setTitle(clip.caption.ifBlank { clip.name })
             .setItems(labels) { _, which ->
@@ -21,8 +22,9 @@ object LocalMenu {
                     0 -> confirm(host, clip, onDeleted)
                     1 -> share(host, clip)
                     2 -> openOutside(host, clip)
-                    3 -> copy(host, clip)
-                    4 -> move(host, clip, profiles, onMoved)
+                    3 -> openOnTikTok(host, clip)
+                    4 -> copy(host, clip)
+                    5 -> move(host, clip, profiles, onMoved)
                 }
             }
             .show()
@@ -74,6 +76,13 @@ object LocalMenu {
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
         runCatching { host.startActivity(intent) }.onFailure { note(host, "No player for this file") }
+    }
+
+    private fun openOnTikTok(host: AppCompatActivity, clip: LocalVideo) {
+        val page = if (clip.clipId.isBlank()) "https://www.tiktok.com/@${clip.author}"
+        else "https://www.tiktok.com/@${clip.author}/video/${clip.clipId}"
+        runCatching { host.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(page))) }
+            .onFailure { note(host, "No browser for this link") }
     }
 
     private fun copy(host: AppCompatActivity, clip: LocalVideo) {
