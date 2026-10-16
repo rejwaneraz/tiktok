@@ -20,9 +20,11 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class MainActivity : AppCompatActivity() {
 
@@ -45,6 +47,8 @@ class MainActivity : AppCompatActivity() {
     private var tikWeb: TikTokWeb? = null
     private var task: Job? = null
     private var commentTask: Job? = null
+    private var commentDone = 0
+    private var commentTotal = 0
     private var lastPercent = -1
     private var section = LIST
     private val failed = ArrayList<Clip>()
@@ -229,14 +233,8 @@ class MainActivity : AppCompatActivity() {
                     "1 records file"))
             },
             SettingsAdapter.Row("Fetch comments for saved videos",
-                "${Comments.stored(this)} of ${saved.size} clips", "Backup") { fetchComments(saved) },
-            SettingsAdapter.Row("Comment requests", "${linesOf(commentLog()).size} URLs", "Backup") {
-                val log = commentLog()
-                note("What the page asked for",
-                    if (log.isBlank()) lines("Nothing has been tried yet.",
-                        "", "Open a video's comments once and come back here.")
-                    else log.take(4000))
-            },
+                if (commentTask?.isActive == true) "running $commentDone/$commentTotal — tap to stop"
+                else "${Comments.stored(this)} of ${saved.size} clips", "Backup") { fetchComments(saved) },
             SettingsAdapter.Row("Back up now", "", "Backup") {
                 Backup.snapshot(this)
                 note("Backed up", lines("Records written to", "Download/TikTokGrab/Backup/meta"))
@@ -268,11 +266,6 @@ class MainActivity : AppCompatActivity() {
         ))
     }
 
-    /** Every comment URL the hidden page ever asked for, kept in Download so it can be read back. */
-    private fun commentLog(): String = Store.readText(this, "logs", "weblog.txt").orEmpty()
-
-    private fun linesOf(text: String) = text.lineSequence().filter { it.isNotBlank() }.toList()
-
     private fun lines(vararg parts: String) = parts.joinToString("\n")
 
     private fun note(title: String, message: String) {
@@ -300,47 +293,51 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
-     * Comments can only come from the page itself, so this opens each video in the hidden WebView —
-     * about 0.8 MB per video, which is why it asks first and can be stopped with the back button.
+     * One small request per clip, spaced out because the reader allows one per second — about 40 KB
+     * and 1.2 seconds each, which is why it says so first. Tapping the row again stops it.
      */
     private fun fetchComments(saved: List<LocalVideo>) {
+        if (commentTask?.isActive == true) {
+            commentTask?.cancel()
+            commentTask = null
+            note("Comments", "Stopped at $commentDone of $commentTotal.")
+            showSettings()
+            return
+        }
         val missing = Comments.missingFor(this, saved)
         if (missing.isEmpty()) {
             note("Comments", "Every saved video already has its comments.")
             return
         }
-        if (!Cookies.hasLogin()) {
-            note("Comments", getString(R.string.comments_need_login))
-            return
-        }
-        val megabytes = missing.size * 8 / 10
+        val megabytes = (missing.size * 4 + 99) / 100
+        val minutes = (missing.size * 12 + 599) / 600
         MaterialAlertDialogBuilder(this)
             .setTitle("Fetch ${missing.size} comment sets?")
-            .setMessage(lines("Each video's TikTok page is opened once in the background, roughly " +
-                "$megabytes MB for all ${missing.size} of them.", "",
-                "You can stop with the back button."))
+            .setMessage(lines("About $megabytes MB in total and $minutes minutes, since the reader " +
+                "answers one clip per second.", "", "Tap the same row again to stop."))
             .setNegativeButton("Not now", null)
             .setPositiveButton("Fetch") { _, _ -> pullComments(missing) }
             .show()
     }
 
     private fun pullComments(missing: List<LocalVideo>) {
-        commentTask?.cancel()
+        commentDone = 0
+        commentTotal = missing.size
         commentTask = lifecycleScope.launch {
-            var done = 0
-            var silent = 0
+            var empty = 0
             missing.forEach { video ->
-                val page = "https://www.tiktok.com/@${video.author}/video/${video.clipId}"
-                val web = tikWeb ?: TikTokWeb(this@MainActivity).also { tikWeb = it }
-                val got = runCatching { web.captureComments(page, video.clipId) }.getOrDefault(0)
-                done++
-                if (got == 0) silent++
-                statusView.text = "Comments $done/${missing.size}"
+                val got = withContext(Dispatchers.IO) {
+                    runCatching { Comments.fetch(this@MainActivity, video.clipId).size }.getOrDefault(0)
+                }
+                commentDone++
+                if (got == 0) empty++
+                statusView.text = "Comments $commentDone/$commentTotal"
             }
+            commentTask = null
             Backup.snapshot(this@MainActivity)
             showSettings()
-            note("Comments", "$done of ${missing.size} saved" +
-                if (silent == 0) "" else ", $silent sent nothing back")
+            note("Comments", "$commentDone of $commentTotal saved" +
+                if (empty == 0) "" else ", $empty have none")
         }
     }
 

@@ -34,6 +34,16 @@ object Http {
         }
     }
 
+    /** A JSON answer from a service that needs neither TikTok's session nor its page signature. */
+    fun openGet(url: String): String {
+        val call = Request.Builder().url(url).header("User-Agent", UA)
+            .header("Accept", "application/json").build()
+        client.newCall(call).execute().use { response ->
+            if (!response.isSuccessful) throw RuntimeException("HTTP ${response.code}")
+            return response.body?.string() ?: ""
+        }
+    }
+
     /** Where a vm.tiktok / vt.tiktok short link actually lands. */
     fun finalUrl(url: String): String =
         client.newCall(request(url)).execute().use { response -> response.request.url.toString() }

@@ -47,7 +47,6 @@ object CommentSheet {
         when {
             saved.isNotEmpty() -> paint(saved)
             video.clipId.isBlank() -> paint(saved, host.getString(R.string.comments_no_id))
-            !Cookies.hasLogin() -> paint(saved, host.getString(R.string.comments_need_login))
             else -> {
                 paint(saved, host.getString(R.string.comments_loading))
                 host.lifecycleScope.launch {

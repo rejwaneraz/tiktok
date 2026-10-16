@@ -45,10 +45,9 @@
     <string name="follow_someone">Follow someone to fill this feed</string>
     <string name="reply">Reply</string>
     <string name="comments_suffix">comments</string>
-    <string name="comments_loading">Opening the TikTok page once to read its comments…</string>
-    <string name="comments_none">TikTok sent no comments back for this video — they may be turned off, or the page did not finish loading. Try again from Settings → Fetch comments.</string>
+    <string name="comments_loading">Reading the comments of this clip from TikTok…</string>
+    <string name="comments_none">This clip has no comments on TikTok, or they are turned off.</string>
     <string name="comments_no_id">This file was not downloaded by the app, so its comments were never saved.</string>
-    <string name="comments_need_login">Log in first — comments come from TikTok while you are online.</string>
     <string name="fetch_comments">Fetch comments for saved videos</string>
     <string name="backup_now">Back up now</string>
     <string name="restore_now">Restore from backup</string>
