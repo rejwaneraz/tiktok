@@ -355,8 +355,9 @@ class MainActivity : AppCompatActivity() {
         val minutes = (missing.size * 12 + 599) / 600
         MaterialAlertDialogBuilder(this)
             .setTitle("Fetch ${missing.size} comment sets?")
-            .setMessage(lines("About $megabytes MB in total and $minutes minutes, since the reader " +
-                "answers one clip per second.", "", "Tap the same row again to stop."))
+            .setMessage(lines("About $megabytes MB and $minutes minutes: the reader answers one clip " +
+                "per second, and each set is assumed to hold up to 100 comments. Comment pictures " +
+                "can push that higher.", "", "Tap the same row again to stop."))
             .setNegativeButton("Not now", null)
             .setPositiveButton("Fetch") { _, _ -> pullComments(missing) }
             .show()
@@ -367,19 +368,30 @@ class MainActivity : AppCompatActivity() {
         commentTotal = missing.size
         commentTask = lifecycleScope.launch {
             var empty = 0
+            var failed = 0
             missing.forEach { video ->
                 val got = withContext(Dispatchers.IO) {
-                    runCatching { Comments.fetch(this@MainActivity, video.clipId).size }.getOrDefault(0)
+                    runCatching { Comments.fetch(this@MainActivity, video.clipId) }.getOrNull()
                 }
                 commentDone++
-                if (got == 0) empty++
+                // Three outcomes, not two: the clip has none, the reader answered and had none, or the
+                // reader never answered. Only the first two are facts about the clip.
+                if (got == null || got.failed) {
+                    failed++
+                } else if (got.comments.isEmpty()) {
+                    empty++
+                }
                 statusView.text = "Comments $commentDone/$commentTotal"
             }
             commentTask = null
             Backup.snapshot(this@MainActivity)
             showSettings()
-            note("Comments", "$commentDone of $commentTotal saved" +
-                if (empty == 0) "" else ", $empty have none")
+            val savedCount = commentDone - empty - failed
+            note("Comments", buildString {
+                append("$savedCount of $commentTotal saved")
+                if (empty > 0) append(", $empty have none")
+                if (failed > 0) append(", $failed could not be read — tap this row again to retry")
+            })
         }
     }
 

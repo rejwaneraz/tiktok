@@ -18,6 +18,13 @@ data class Comment(
 }
 
 /**
+ * What one pull actually did. `failed` is the part that used to be invisible: a reader that refuses,
+ * rate-limits, or runs into a dead network returns nothing, and nothing looked exactly like "this
+ * clip has no comments" — two very different things that both counted as zero.
+ */
+data class Fetched(val comments: List<Comment>, val failed: Boolean)
+
+/**
  * TikTok guards its own comment endpoint behind a browser signature, so comments come from a public
  * reader instead: plain HTTP, no login, and it answers with the text, hearts, pictures and names the
  * page itself shows. One clip is one JSON file under Backup, so a reinstall cannot take it.
@@ -58,20 +65,24 @@ object Comments {
 
     /**
      * Up to LIMIT comments for one clip, written back page by page so stopping half way still keeps
-     * what came. Blocking — call it off the main thread. An empty answer is a real one: the clip has
-     * no comments, or they are turned off.
+     * what came. Blocking — call it off the main thread.
      */
-    fun fetch(context: Context, clipId: String): List<Comment> {
-        if (clipId.isBlank()) return emptyList()
+    fun fetch(context: Context, clipId: String): Fetched {
+        if (clipId.isBlank()) return Fetched(emptyList(), true)
         var kept = load(context, clipId)
         var cursor = 0L
         var pages = 0
+        var answered = false
         while (kept.size < LIMIT && pages < 8) {
             pages++
             pace()
-            val data = runCatching {
-                JSONObject(Http.openGet(page(clipId, cursor))).optJSONObject("data")
-            }.getOrNull() ?: break
+            val body = runCatching { JSONObject(Http.openGet(page(clipId, cursor))) }.getOrNull()
+                ?: break
+            // "code 0" is the reader saying "here is the clip". Anything else is its "not for you"
+            // (rate limit, unknown clip, blocked) and must never be read as an empty clip.
+            if (body.optInt("code", 0) != 0) break
+            answered = true
+            val data = body.optJSONObject("data") ?: break
             val batch = data.optJSONArray("comments") ?: JSONArray()
             if (batch.length() == 0) break
             kept = merge(context, clipId, (0 until batch.length()).mapNotNull { i ->
@@ -80,7 +91,7 @@ object Comments {
             if (kept.size >= LIMIT || !data.optBoolean("hasMore")) break
             cursor = data.optLong("cursor", cursor + PAGE)
         }
-        return kept
+        return Fetched(kept, failed = !answered)
     }
 
     /** Spacing is per request, not per clip: a batch of single-page clips must stay slow too. */

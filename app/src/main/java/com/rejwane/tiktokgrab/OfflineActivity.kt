@@ -211,10 +211,10 @@ class OfflineActivity : AppCompatActivity(), OfflineAdapter.Listener {
     /** Comments open inside the app: the saved file first, one small pull when there is none. */
     override fun onComments(video: LocalVideo) = CommentSheet.show(this, video) { pull -> pullComments(pull) }
 
-    private suspend fun pullComments(video: LocalVideo): Int = withContext(Dispatchers.IO) {
-        val got = Comments.fetch(this@OfflineActivity, video.clipId).size
+    private suspend fun pullComments(video: LocalVideo): Boolean = withContext(Dispatchers.IO) {
+        val got = Comments.fetch(this@OfflineActivity, video.clipId)
         Backup.snapshot(this@OfflineActivity)
-        got
+        !got.failed
     }
 
     override fun onShare(video: LocalVideo) = LocalMenu.share(this, video)

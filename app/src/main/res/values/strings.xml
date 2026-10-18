@@ -47,6 +47,7 @@
     <string name="comments_suffix">comments</string>
     <string name="comments_loading">Reading the comments of this clip from TikTok…</string>
     <string name="comments_none">This clip has no comments on TikTok, or they are turned off.</string>
+    <string name="comments_unreachable">Could not reach the comment reader. This is a network or reader problem, not an empty clip. Tap the comment icon to try again.</string>
     <string name="comments_no_id">This file was not downloaded by the app, so its comments were never saved.</string>
     <string name="fetch_comments">Fetch comments for saved videos</string>
     <string name="backup_now">Back up now</string>

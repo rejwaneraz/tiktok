@@ -20,7 +20,7 @@ import kotlinx.coroutines.launch
  */
 object CommentSheet {
 
-    fun show(host: AppCompatActivity, video: LocalVideo, pull: suspend (LocalVideo) -> Int) {
+    fun show(host: AppCompatActivity, video: LocalVideo, pull: suspend (LocalVideo) -> Boolean) {
         val view = LayoutInflater.from(host).inflate(R.layout.sheet_comments, null)
         val title = view.findViewById<TextView>(R.id.commentsTitle)
         val list = view.findViewById<RecyclerView>(R.id.commentsList)
@@ -50,9 +50,13 @@ object CommentSheet {
             else -> {
                 paint(saved, host.getString(R.string.comments_loading))
                 host.lifecycleScope.launch {
-                    val got = runCatching { pull(video) }.getOrDefault(0)
+                    val answered = runCatching { pull(video) }.getOrDefault(false)
                     val kept = Comments.load(host, video.clipId)
-                    paint(kept, if (got == 0 && kept.isEmpty()) host.getString(R.string.comments_none) else "")
+                    paint(kept, when {
+                        kept.isNotEmpty() -> ""
+                        answered -> host.getString(R.string.comments_none)
+                        else -> host.getString(R.string.comments_unreachable)
+                    })
                 }
             }
         }
