@@ -16,13 +16,19 @@ jobs:
           java-version: "17"
 
       - uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: "8.7"
 
-      - name: Assemble debug APK
-        run: gradle --no-daemon assembleDebug
+      - name: Check sources
+        run: python3 tools/check_sources.py .
+
+      - name: Unit tests and debug APK
+        # --continue keeps the APK coming even when a test fails: a red run is how we find out, and
+        # the phone still gets something to install. The chmod is belt and braces for the exec bit.
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon --continue testDebugUnitTest assembleDebug
 
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: tiktokgrab-debug-apk
           path: app/build/outputs/apk/debug/*.apk

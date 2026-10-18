@@ -1,0 +1,6 @@
+# The wrapper script is passed to /bin/sh on the CI runner: if a Windows clone checked it out with
+# CRLF, the shebang becomes "#!/bin/sh\r" and every build dies with "bad interpreter".
+gradlew text eol=lf
+
+# The wrapper jar is a zip; never touch its bytes.
+gradle/wrapper/*.jar binary
