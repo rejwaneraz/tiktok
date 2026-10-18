@@ -64,9 +64,15 @@ object LocalVideos {
     fun sanitize(name: String) =
         name.filterNot { ILLEGAL.contains(it) }.trim().trim('.').ifBlank { UNASSIGNED }
 
-    fun scan(context: Context): List<LocalVideo> = runCatching {
-        (vault(context) + scoped(context) + legacy(context)).sortedByDescending { it.addedAt }
-    }.getOrDefault(emptyList())
+    fun scan(context: Context): List<LocalVideo> {
+        val found = runCatching {
+            (vault(context) + scoped(context) + legacy(context)).sortedByDescending { it.addedAt }
+        }.getOrNull() ?: return emptyList()
+        // The record follows the folder, not the other way round: a clip that no longer has a file
+        // anywhere is not downloaded, whatever the saved id set still says.
+        Downloader.reconcile(context, found.filter { it.clipId.isNotBlank() }.map { it.clipId }.toSet())
+        return found
+    }
 
     /** The library folder itself: one place for every video, whatever the caption or the profile. */
     private fun vault(context: Context): List<LocalVideo> {

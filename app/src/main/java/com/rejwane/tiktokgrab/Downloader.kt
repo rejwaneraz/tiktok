@@ -29,6 +29,9 @@ object Downloader {
     private const val FOLDER = "TikTokGrab"
     private const val ILLEGAL = "<>:\"/\\|?*"
 
+    /** Anything under this is an error page, not a clip — the shortest real video is far bigger. */
+    private const val NOT_A_VIDEO = 10_000L
+
     private val client = OkHttpClient.Builder()
         .connectTimeout(30, TimeUnit.SECONDS)
         .readTimeout(90, TimeUnit.SECONDS)
@@ -44,6 +47,20 @@ object Downloader {
         val kept = HashSet(doneIds(context))
         kept.remove(clipId)
         prefs(context).edit().putStringSet("ids", kept).apply()
+    }
+
+    /**
+     * The record must not outlive the file. A video removed from the folder by a file manager, or by
+     * the system, leaves its id behind — and then the list calls that clip "already downloaded" while
+     * the player has nothing to open. Only drops ids while we can still see the library, so a revoked
+     * permission cannot empty the list and make everything download again.
+     */
+    fun reconcile(context: Context, present: Set<String>) {
+        if (!Vault.granted(context)) return
+        val known = doneIds(context)
+        if (known.isEmpty()) return
+        val kept = known.filterTo(HashSet()) { it in present }
+        if (kept.size != known.size) prefs(context).edit().putStringSet("ids", kept).apply()
     }
 
     private fun fileName(clip: Clip): String {
@@ -128,8 +145,14 @@ object Downloader {
         }
         val uri = context.contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
             ?: throw RuntimeException("could not create file")
-        context.contentResolver.openOutputStream(uri)?.use { stream(response, it, onBytes) }
-            ?: throw RuntimeException("could not write file")
+        try {
+            context.contentResolver.openOutputStream(uri)?.use { stream(response, it, onBytes) }
+                ?: throw RuntimeException("could not write file")
+        } catch (e: Exception) {
+            // A half row in the gallery is worse than no row: drop it so the retry starts clean.
+            runCatching { context.contentResolver.delete(uri, null, null) }
+            throw e
+        }
         return Pair("Downloads/$FOLDER/$folder/$name", uri.toString())
     }
 
@@ -139,12 +162,19 @@ object Downloader {
         val dir = File(base, folder)
         dir.mkdirs()
         val file = File(dir, name)
-        file.outputStream().use { stream(response, it, onBytes) }
+        try {
+            file.outputStream().use { stream(response, it, onBytes) }
+        } catch (e: Exception) {
+            runCatching { file.delete() }
+            throw e
+        }
         return Pair(file.absolutePath, Uri.fromFile(file).toString())
     }
 
     private suspend fun stream(response: Response, out: OutputStream, onBytes: (Long) -> Unit) {
-        val src = response.body?.byteStream() ?: throw RuntimeException("empty response")
+        val body = response.body ?: throw RuntimeException("empty response")
+        val total = body.contentLength()
+        val src = body.byteStream()
         val buffer = ByteArray(64 * 1024)
         var written = 0L
         src.use { input ->
@@ -158,5 +188,11 @@ object Downloader {
             }
         }
         out.flush()
+        // A connection that closes early still returns a short file: it plays a few seconds and stops,
+        // yet it used to be marked downloaded, so it was never retried. Three guards, cheapest first —
+        // nothing is not a video, an error page is tiny, a short body is shorter than its own header.
+        if (written == 0L) throw RuntimeException("empty download")
+        if (written < NOT_A_VIDEO) throw RuntimeException("not a video (only $written bytes)")
+        if (total > 0 && written != total) throw RuntimeException("incomplete: $written of $total bytes")
     }
 }
