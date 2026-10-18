@@ -8,6 +8,7 @@ import android.widget.ImageView
 import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
 import coil.load
+import java.util.Locale
 
 class GridAdapter(
     private val onOpen: (Int) -> Unit,
@@ -121,11 +122,13 @@ class GridAdapter(
     }
 
     companion object {
-        fun clock(seconds: Int) = "${seconds / 60}:${"%02d".format(seconds % 60)}"
+        // Formatted in English on purpose: the whole UI is English, so a phone set to a locale that
+        // writes decimals with a comma must not turn "1.5M" into "1,5M".
+        fun clock(seconds: Int) = "${seconds / 60}:${"%02d".format(Locale.US, seconds % 60)}"
 
         fun short(n: Long) = when {
-            n >= 1_000_000 -> "%.1fM".format(n / 1_000_000.0)
-            n >= 1_000 -> "%.1fk".format(n / 1000.0)
+            n >= 1_000_000 -> "%.1fM".format(Locale.US, n / 1_000_000.0)
+            n >= 1_000 -> "%.1fk".format(Locale.US, n / 1000.0)
             else -> n.toString()
         }
 
@@ -145,8 +148,8 @@ class GridAdapter(
         }
 
         fun mb(bytes: Long) = when {
-            bytes >= 1_000_000 -> "%.1f MB".format(bytes / 1_000_000.0)
-            bytes >= 1_000 -> "%.0f KB".format(bytes / 1000.0)
+            bytes >= 1_000_000 -> "%.1f MB".format(Locale.US, bytes / 1_000_000.0)
+            bytes >= 1_000 -> "%.0f KB".format(Locale.US, bytes / 1000.0)
             else -> "$bytes B"
         }
     }
