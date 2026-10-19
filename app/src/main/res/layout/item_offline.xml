@@ -48,28 +48,29 @@
 
             <ImageView
                 android:id="@+id/railAvatar"
-                android:layout_width="44dp"
-                android:layout_height="44dp"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:background="@drawable/rail_avatar_ring"
                 android:contentDescription="@null"
+                android:padding="2dp"
                 android:src="@drawable/avatar_ring" />
 
             <ImageView
                 android:id="@+id/railFollow"
-                android:layout_width="20dp"
-                android:layout_height="20dp"
+                android:layout_width="22dp"
+                android:layout_height="22dp"
                 android:layout_gravity="bottom|center_horizontal"
-                android:layout_marginTop="32dp"
-                android:contentDescription="@null"
-                android:src="@drawable/ic_add"
                 android:background="@drawable/dot_accent"
-                android:padding="3dp" />
+                android:contentDescription="@null"
+                android:padding="4dp"
+                android:src="@drawable/ic_add" />
         </FrameLayout>
 
         <ImageView
             android:id="@+id/railLike"
-            android:layout_width="30dp"
-            android:layout_height="30dp"
-            android:layout_marginTop="18dp"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:layout_marginTop="14dp"
             android:contentDescription="@null"
             android:src="@drawable/ic_like" />
 
@@ -81,13 +82,14 @@
             android:shadowColor="#80000000"
             android:shadowRadius="4"
             android:textColor="@color/on_video"
-            android:textSize="12sp" />
+            android:textSize="13sp"
+            android:textStyle="bold" />
 
         <ImageView
             android:id="@+id/railComment"
-            android:layout_width="30dp"
-            android:layout_height="30dp"
-            android:layout_marginTop="18dp"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:layout_marginTop="14dp"
             android:contentDescription="@null"
             android:src="@drawable/ic_comment" />
 
@@ -99,13 +101,14 @@
             android:shadowColor="#80000000"
             android:shadowRadius="4"
             android:textColor="@color/on_video"
-            android:textSize="12sp" />
+            android:textSize="13sp"
+            android:textStyle="bold" />
 
         <ImageView
             android:id="@+id/railMark"
-            android:layout_width="30dp"
-            android:layout_height="30dp"
-            android:layout_marginTop="18dp"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:layout_marginTop="14dp"
             android:contentDescription="@null"
             android:src="@drawable/ic_bookmark" />
 
@@ -117,13 +120,14 @@
             android:shadowColor="#80000000"
             android:shadowRadius="4"
             android:textColor="@color/on_video"
-            android:textSize="12sp" />
+            android:textSize="13sp"
+            android:textStyle="bold" />
 
         <ImageView
             android:id="@+id/railShare"
-            android:layout_width="30dp"
-            android:layout_height="30dp"
-            android:layout_marginTop="18dp"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:layout_marginTop="14dp"
             android:contentDescription="@null"
             android:src="@drawable/ic_share" />
 
@@ -135,7 +139,8 @@
             android:shadowColor="#80000000"
             android:shadowRadius="4"
             android:textColor="@color/on_video"
-            android:textSize="12sp" />
+            android:textSize="13sp"
+            android:textStyle="bold" />
     </LinearLayout>
 
     <LinearLayout

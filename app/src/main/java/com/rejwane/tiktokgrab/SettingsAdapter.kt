@@ -47,6 +47,9 @@ class App : android.app.Application() {
         CrashRecorder.install(this)
         Backup.restoreIfEmpty(this)
         Theme.apply(this)
+        // Pictures saved by the older builds were plain .jpg and a gallery picked them up. Renaming
+        // them is cheap, and it has to happen before the next media scan runs.
+        Thread { runCatching { Store.hideExisting(this) } }.start()
     }
 }
 

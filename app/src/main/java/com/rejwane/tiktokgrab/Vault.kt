@@ -38,20 +38,31 @@ object Vault {
         else context.checkSelfPermission(android.Manifest.permission.WRITE_EXTERNAL_STORAGE) ==
             PackageManager.PERMISSION_GRANTED
 
-    /** Takes the user to the one switch we need, or asks for the old permission below Android 11. */
-    fun requestAccess(activity: android.app.Activity): Boolean {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            runCatching {
-                activity.startActivity(Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
-                    Uri.parse("package:" + activity.packageName)))
-            }.getOrElse {
-                runCatching { activity.startActivity(Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION)) }
-            }
+    /** True on phones that ask for the old storage permission instead of the All files switch. */
+    fun usesRuntimePermission(): Boolean = Build.VERSION.SDK_INT < Build.VERSION_CODES.R
+
+    /**
+     * Android never shows a dialog for All files access — the switch lives on a system page, and the
+     * app has to open that page itself. Three addresses are tried in order, because some phones hide
+     * the first one (and a few bury it under the app's own details page).
+     */
+    fun openAccessSettings(activity: android.app.Activity): Boolean {
+        if (usesRuntimePermission()) {
+            // Android 10 and below still ask at runtime; the legacy flag in the manifest is what
+            // then turns that permission into real file access for our own folder.
+            activity.requestPermissions(arrayOf(android.Manifest.permission.WRITE_EXTERNAL_STORAGE), 41)
             return true
         }
-        // Android 10 still asks for the storage permission at runtime; the legacy flag in the
-        // manifest is what then turns it into real file access for our own folder.
-        activity.requestPermissions(arrayOf(android.Manifest.permission.WRITE_EXTERNAL_STORAGE), 41)
+        val tries = listOf(
+            Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
+                Uri.parse("package:" + activity.packageName)),
+            Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION),
+            Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                Uri.parse("package:" + activity.packageName))
+        )
+        for (intent in tries) {
+            if (runCatching { activity.startActivity(intent) }.isSuccess) return true
+        }
         return false
     }
 

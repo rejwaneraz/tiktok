@@ -64,6 +64,19 @@ as a failure. It is now waited out (1.4 s, two tries) before the clip is called 
 `images[]` is stored as a URL in the comment file; the JPEG is downloaded only when the picture is
 tapped, then kept for offline. A batch fetch therefore stays ~34 KB per clip instead of megabytes.
 
+### 2026-10-20 — pictures are named `.jpg.nomedia`
+Avatars and comment pictures sit under `Backup/` and were plain `.jpg`, so a gallery picked them up.
+They are now written as `<name>.jpg.nomedia` with a `.nomedia` marker in each folder: the bytes stay a
+JPEG, the app finds them by the same name, and no gallery indexes them. Rows written through
+MediaStore before the switch was granted are copied into the hidden file and their row dropped, so
+the gallery loses them without the app losing the picture.
+
+### 2026-10-20 — a profile's swipe is read before its children
+The profile is a scroll view full of buttons, so a page-level touch listener never saw the drag and
+"For You → profile" worked while "profile → For You" did not. The gesture is now read in
+`dispatchTouchEvent`, before any child, and once it is clearly sideways the activity takes the rest of
+the gesture.
+
 ## Measured, from a real request (2026-10-20)
 
 `https://www.tikwm.com/api/?url=<video>&hd=1` → 200, 7.2 KB, 2.1 s: `duration`, `size`, `hd_size`,

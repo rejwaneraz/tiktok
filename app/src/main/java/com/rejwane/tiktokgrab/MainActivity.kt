@@ -53,6 +53,7 @@ class MainActivity : AppCompatActivity() {
     private var section = LIST
     private val failed = ArrayList<Clip>()
 
+
     private val countValues by lazy { resources.getIntArray(R.array.count_values) }
 
     private val loginLauncher =
@@ -125,6 +126,14 @@ class MainActivity : AppCompatActivity() {
         showSelection()
         showSection(LIBRARY)
         if (intent.getBooleanExtra(CLIP_EXTRA, false)) fromClipboard()
+
+        // Android cannot ask for All files access at install time, and a fresh install has nothing
+        // in the library yet — so the first launch is where the switch has to be explained.
+        val ui = getSharedPreferences("ui", MODE_PRIVATE)
+        if (!Vault.granted(this) && !ui.getBoolean("asked_access", false)) {
+            ui.edit().putBoolean("asked_access", true).apply()
+            statusView.post { askForAccess() }
+        }
     }
 
     /**
@@ -217,18 +226,15 @@ class MainActivity : AppCompatActivity() {
                     "They stay there even after this app is uninstalled."))
             },
             SettingsAdapter.Row("All files access", if (Vault.granted(this)) "Granted" else "Needed", "Storage") {
-                val had = Vault.granted(this)
-                val inLibrary = Vault.list(this)
-                note("All files access", if (had)
-                    lines("Granted — videos are saved as plain files in",
+                if (Vault.granted(this)) {
+                    val inLibrary = Vault.list(this)
+                    note("All files access", lines("Granted — videos are saved as plain files in",
                         "Download/TikTokGrab/${Vault.LIBRARY} as *${Vault.EXT}",
                         "", "${inLibrary.size} files · ${GridAdapter.mb(inLibrary.sumOf { it.length() })}",
-                        "A gallery will not show them and a reinstall will not take them.")
-                else lines("Turn the switch ON for TikTok Grab on the page that opens next.", "",
-                    "Without it a download is refused instead of dropped into the gallery, because the",
-                    "system deletes those files when this app goes — that is what happened to the last",
-                    "library."))
-                if (!had) Vault.requestAccess(this)
+                        "A gallery will not show them and a reinstall will not take them."))
+                } else {
+                    askForAccess()
+                }
             },
             SettingsAdapter.Row("Profile pictures", "${Authors.cachedAvatars(this)} cached", "Storage") {
                 val had = Authors.cachedAvatars(this)
@@ -310,6 +316,39 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun lines(vararg parts: String) = parts.joinToString("\n")
+
+    /**
+     * The one thing no dialog can do for us: All files access is a switch on a system page. This
+     * explains it in place, opens the page, and keeps a flag so the app asks once and then only
+     * on demand — never as a wall at every launch.
+     */
+    private fun askForAccess(onGranted: () -> Unit = {}) {
+        if (Vault.granted(this)) {
+            onGranted()
+            return
+        }
+        MaterialAlertDialogBuilder(this)
+            .setTitle("All files access is needed")
+            .setMessage(lines(
+                "Android shows no dialog for this one: the switch sits on a system page.",
+                "",
+                "If your phone asks for storage permission instead, that dialog comes next.",
+                "",
+                "Tap Open settings, find TikTok Grab in the list, turn the switch ON, then come back.",
+                "",
+                "If the page says no apps: Settings → Apps → Special app access → All files access",
+                "→ TikTok Grab."
+            ))
+            .setPositiveButton("Open settings") { _, _ ->
+                val opened = Vault.openAccessSettings(this)
+                if (!opened) note("Could not open it", lines(
+                    "Open Settings yourself, then: Apps → Special app access → All files access",
+                    "→ TikTok Grab → Allow access to manage all files."))
+            }
+            .setNegativeButton("Later", null)
+            .show()
+    }
+
 
     private fun note(title: String, message: String) {
         MaterialAlertDialogBuilder(this).setTitle(title).setMessage(message).setPositiveButton("OK", null).show()
@@ -498,7 +537,8 @@ class MainActivity : AppCompatActivity() {
         if (clips.isEmpty()) return
         if (!Vault.granted(this)) {
             // Refuse out loud instead of letting the system keep a copy it will delete with the app.
-            statusView.text = "All files access is off - turn it on in Settings, then try again"
+            statusView.text = "All files access is needed before a download"
+            askForAccess()
             return
         }
         failed.clear()
@@ -555,6 +595,9 @@ class MainActivity : AppCompatActivity() {
         // that says "Needed" is repainted without asking the user to tap anything.
         if (section == SETTINGS) showSettings()
         moveOldVideos()
+        if (!Vault.granted(this)) {
+            statusView.text = "All files access is still off — tap All files access in Settings"
+        }
     }
 
     companion object {

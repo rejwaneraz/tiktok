@@ -34,31 +34,107 @@ object Store {
     )
 
     private fun plainFile(context: Context, folder: String, name: String) =
-        File(plainDir(context, folder), name)
+        File(plainDir(context, folder), onDisk(name))
+
+    /**
+     * A saved picture is written as "x.jpg.nomedia": the bytes are a JPEG, but no gallery indexes a
+     * type it does not know and no other app offers to open it. The app reads it back by name, so
+     * nothing else changes.
+     */
+    private fun onDisk(name: String): String = when {
+        name.endsWith(".jpg", true) || name.endsWith(".png", true) -> "$name.nomedia"
+        else -> name
+    }
+
+    /** Renames pictures written before the hidden extension, then leaves the marker a scanner obeys. */
+    fun hideExisting(context: Context) {
+        if (!Vault.granted(context)) return
+        listOf("photos", "avatars").forEach { folder ->
+            val dir = plainDir(context, folder)
+            if (!dir.isDirectory) return@forEach
+            runCatching { if (!File(dir, ".nomedia").exists()) File(dir, ".nomedia").createNewFile() }
+            dir.listFiles()?.forEach { file ->
+                if (!file.isFile) return@forEach
+                val name = file.name
+                if (name == ".nomedia" || name.endsWith(".nomedia")) return@forEach
+                if (!name.endsWith(".jpg", true) && !name.endsWith(".png", true)) return@forEach
+                runCatching { file.renameTo(File(dir, "$name.nomedia")) }
+            }
+        }
+        adoptStored(context, "photos")
+        adoptStored(context, "avatars")
+    }
+
+    /**
+     * Pictures saved before All files access was granted are MediaStore rows, which a gallery shows.
+     * Each is copied into the hidden plain file and its row dropped — the app keeps the picture, the
+     * gallery loses it, and a reinstall still finds it on disk.
+     */
+    private fun adoptStored(context: Context, folder: String) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return
+        val rows = runCatching {
+            context.contentResolver.query(
+                MediaStore.Downloads.EXTERNAL_CONTENT_URI,
+                arrayOf(MediaStore.MediaColumns._ID, MediaStore.MediaColumns.DISPLAY_NAME),
+                "${MediaStore.MediaColumns.RELATIVE_PATH} LIKE ?",
+                arrayOf("${relative(folder)}/%"), null
+            )?.use { c ->
+                val out = ArrayList<Pair<Long, String>>()
+                while (c.moveToNext()) {
+                    if (c.getColumnCount() < 2) break
+                    out.add(c.getLong(0) to (c.getString(1) ?: ""))
+                }
+                out
+            }
+        }.getOrNull().orEmpty()
+        if (rows.isEmpty()) return
+        val dir = plainDir(context, folder).apply { mkdirs() }
+        rows.forEach { (id, name) ->
+            val uri = Uri.withAppendedPath(MediaStore.Downloads.EXTERNAL_CONTENT_URI, id.toString())
+            val to = File(dir, onDisk(name.ifBlank { "$folder$id.jpg" }))
+            if (to.isFile && to.length() > 0) {
+                runCatching { context.contentResolver.delete(uri, null, null) }
+                return@forEach
+            }
+            val copied = runCatching {
+                context.contentResolver.openInputStream(uri)?.use { input ->
+                    to.outputStream().use { out -> input.copyTo(out) }
+                }
+                true
+            }.getOrDefault(false) && to.length() > 0
+            if (copied) runCatching { context.contentResolver.delete(uri, null, null) }
+        }
+        runCatching { if (!File(dir, ".nomedia").exists()) File(dir, ".nomedia").createNewFile() }
+    }
 
     fun find(context: Context, folder: String, name: String): Uri? {
+        val disk = onDisk(name)
         if (Vault.granted(context)) {
             val plain = plainFile(context, folder, name)
             if (plain.isFile && plain.length() > 0) return Uri.fromFile(plain)
         }
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return legacyFile(context, folder, name)?.let(Uri::fromFile)
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+            return legacyFile(context, folder, disk)?.let(Uri::fromFile)
+        }
         val id = runCatching {
             context.contentResolver.query(
                 MediaStore.Downloads.EXTERNAL_CONTENT_URI, arrayOf(MediaStore.MediaColumns._ID),
                 "${MediaStore.MediaColumns.RELATIVE_PATH} LIKE ? AND ${MediaStore.MediaColumns.DISPLAY_NAME} = ?",
-                arrayOf("${relative(folder)}/", name), null
+                arrayOf("${relative(folder)}/", disk), null
             )?.use { c -> if (c.moveToFirst()) c.getLong(0) else null }
-        }.getOrNull() ?: return legacyFile(context, folder, name)?.let(Uri::fromFile)
+        }.getOrNull() ?: return legacyFile(context, folder, disk)?.let(Uri::fromFile)
         return Uri.withAppendedPath(MediaStore.Downloads.EXTERNAL_CONTENT_URI, id.toString())
     }
 
     fun exists(context: Context, folder: String, name: String) = find(context, folder, name) != null
 
     fun write(context: Context, folder: String, name: String, mime: String, bytes: ByteArray): Boolean {
+        val disk = onDisk(name)
         if (Vault.granted(context)) {
             return runCatching {
                 val dir = plainDir(context, folder).apply { mkdirs() }
-                File(dir, name).writeBytes(bytes)
+                runCatching { if (!File(dir, ".nomedia").exists()) File(dir, ".nomedia").createNewFile() }
+                File(dir, disk).writeBytes(bytes)
                 true
             }.getOrDefault(false)
         }
@@ -73,7 +149,7 @@ object Store {
             return runCatching {
                 val uri = context.contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI,
                     ContentValues().apply {
-                        put(MediaStore.Downloads.DISPLAY_NAME, name)
+                        put(MediaStore.Downloads.DISPLAY_NAME, disk)
                         put(MediaStore.Downloads.MIME_TYPE, mime)
                         put(MediaStore.Downloads.RELATIVE_PATH, "${relative(folder)}/")
                     }) ?: return false
@@ -83,7 +159,7 @@ object Store {
         }
         return runCatching {
             val dir = legacyDir(context, folder).apply { mkdirs() }
-            File(dir, name).writeBytes(bytes)
+            File(dir, disk).writeBytes(bytes)
             true
         }.getOrDefault(false)
     }

@@ -50,6 +50,12 @@ class OfflineActivity : AppCompatActivity(), OfflineAdapter.Listener {
     private var dragFromY = 0f
     private var dragWidth = 1f
 
+    // The same machine again for a profile, which has to be read before its own children.
+    private var profileMode = DRAG_NONE
+    private var profileFromX = 0f
+    private var profileFromY = 0f
+    private var profileWidth = 1f
+
     /** True while a list swap is re-seating the pager, so its own callbacks cannot fight us. */
     private var swapping = false
 
@@ -109,8 +115,6 @@ class OfflineActivity : AppCompatActivity(), OfflineAdapter.Listener {
         }
         findViewById<TextView>(R.id.profileHi).setOnClickListener { openUrl(tiktokProfile()) }
         findViewById<TextView>(R.id.profileMore).setOnClickListener { overflow() }
-        // A sideways drag over a profile walks back into the feed, the same way the feed walks tabs.
-        findViewById<View>(R.id.profileScroll).setOnTouchListener { page, event -> onDrag(event, page) }
         findViewById<View>(R.id.tabVideos).setOnClickListener { pickTab(VIDEOS) }
         findViewById<View>(R.id.tabShuffle).setOnClickListener { pickTab(SHUFFLE) }
         findViewById<View>(R.id.tabLiked).setOnClickListener { pickTab(LIKED) }
@@ -161,31 +165,29 @@ class OfflineActivity : AppCompatActivity(), OfflineAdapter.Listener {
      */
     override fun onDrag(event: MotionEvent, page: View): Boolean {
         val slop = 9f * resources.displayMetrics.density
-        // A profile slides like a screen; the feed slides the pager underneath it.
-        val moving: View = if (section == PROFILE) profileRoot else pager
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
                 dragMode = DRAG_UNDECIDED
                 dragFromX = event.x
                 dragFromY = event.y
                 dragWidth = page.width.toFloat().coerceAtLeast(1f)
-                if (moving === pager) page.parent?.requestDisallowInterceptTouchEvent(true)
+                page.parent?.requestDisallowInterceptTouchEvent(true)
             }
             MotionEvent.ACTION_MOVE -> {
                 val dx = event.x - dragFromX
                 val dy = event.y - dragFromY
                 if (dragMode == DRAG_UNDECIDED) {
-                    if (abs(dy) > slop && abs(dy) > abs(dx) && moving === pager) {
+                    if (abs(dy) > slop && abs(dy) > abs(dx)) {
                         dragMode = DRAG_VERTICAL
                         page.parent?.requestDisallowInterceptTouchEvent(false)
                     } else if (abs(dx) > slop && abs(dx) > abs(dy) * 1.15f) {
                         dragMode = DRAG_HORIZONTAL
-                        moving.animate().cancel()
+                        pager.animate().cancel()
                     }
                 }
                 if (dragMode == DRAG_HORIZONTAL) {
-                    moving.translationX = dx
-                    moving.alpha = 1f - (abs(dx) / dragWidth) * 0.22f
+                    pager.translationX = dx
+                    pager.alpha = 1f - (abs(dx) / dragWidth) * 0.22f
                 }
             }
             MotionEvent.ACTION_UP -> {
@@ -204,17 +206,6 @@ class OfflineActivity : AppCompatActivity(), OfflineAdapter.Listener {
     }
 
     private fun finishDrag(forward: Boolean) {
-        if (section == PROFILE) {
-            val target = nextSlot(forward)
-            val outOf = if (forward) -dragWidth else dragWidth
-            profileRoot.animate().translationX(outOf).alpha(0.6f).setDuration(130L).withEndAction {
-                profileRoot.translationX = 0f
-                profileRoot.alpha = 1f
-                backToFeed()
-                applySlot(target)
-            }.start()
-            return
-        }
         val out = if (forward) -dragWidth else dragWidth
         pager.animate().translationX(out).alpha(0.65f).setDuration(130L).withEndAction {
             pager.translationX = -out
@@ -225,9 +216,82 @@ class OfflineActivity : AppCompatActivity(), OfflineAdapter.Listener {
     }
 
     private fun settleDrag() {
-        val moving: View = if (section == PROFILE) profileRoot else pager
-        moving.animate().translationX(0f).alpha(1f).setDuration(150L).start()
+        pager.animate().translationX(0f).alpha(1f).setDuration(150L).start()
     }
+
+    // region sideways on a profile
+
+    /**
+     * A profile is a scroll view full of buttons, so a page's touch listener never sees the drag.
+     * Reading it in dispatchTouchEvent happens before any child, and once the drag is clearly
+     * sideways the activity takes the rest of the gesture — that is why going back used to fail.
+     */
+    override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
+        if (section == PROFILE && profileTouch(ev)) return true
+        return super.dispatchTouchEvent(ev)
+    }
+
+    private fun profileTouch(ev: MotionEvent): Boolean {
+        val slop = 9f * resources.displayMetrics.density
+        when (ev.actionMasked) {
+            MotionEvent.ACTION_DOWN -> {
+                profileMode = DRAG_UNDECIDED
+                profileFromX = ev.x
+                profileFromY = ev.y
+                profileWidth = profileRoot.width.toFloat().coerceAtLeast(1f)
+                profileRoot.animate().cancel()
+            }
+            MotionEvent.ACTION_MOVE -> {
+                val dx = ev.x - profileFromX
+                val dy = ev.y - profileFromY
+                if (profileMode == DRAG_UNDECIDED) {
+                    if (abs(dy) > slop && abs(dy) > abs(dx)) profileMode = DRAG_VERTICAL
+                    else if (abs(dx) > slop && abs(dx) > abs(dy) * 1.15f) profileMode = DRAG_HORIZONTAL
+                }
+                if (profileMode == DRAG_HORIZONTAL) {
+                    profileRoot.translationX = dx
+                    profileRoot.alpha = 1f - (abs(dx) / profileWidth) * 0.22f
+                    return true
+                }
+            }
+            MotionEvent.ACTION_UP -> {
+                if (profileMode == DRAG_HORIZONTAL) {
+                    val dx = ev.x - profileFromX
+                    if (abs(dx) > profileWidth * 0.18f) finishProfileDrag(dx < 0) else settleProfileDrag()
+                    profileMode = DRAG_NONE
+                    return true
+                }
+                profileMode = DRAG_NONE
+            }
+            MotionEvent.ACTION_CANCEL -> {
+                if (profileMode == DRAG_HORIZONTAL) {
+                    settleProfileDrag()
+                    profileMode = DRAG_NONE
+                    return true
+                }
+                profileMode = DRAG_NONE
+            }
+        }
+        return false
+    }
+
+    private fun finishProfileDrag(forward: Boolean) {
+        if (section != PROFILE) return
+        val target = nextSlot(forward)
+        val out = if (forward) -profileWidth else profileWidth
+        profileRoot.animate().translationX(out).alpha(0.6f).setDuration(130L).withEndAction {
+            profileRoot.translationX = 0f
+            profileRoot.alpha = 1f
+            backToFeed()
+            applySlot(target)
+        }.start()
+    }
+
+    private fun settleProfileDrag() {
+        profileRoot.animate().translationX(0f).alpha(1f).setDuration(150L).start()
+    }
+
+    // endregion
 
     private fun stepSlot(forward: Boolean) = applySlot(nextSlot(forward))
 
