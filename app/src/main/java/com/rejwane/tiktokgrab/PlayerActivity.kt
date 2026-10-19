@@ -1,5 +1,7 @@
 package com.rejwane.tiktokgrab
 
+import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -8,11 +10,13 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import androidx.viewpager2.widget.ViewPager2
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /** TikTok-style vertical feed: swipe up/down to move between videos, ⬇ saves the current one. */
-class PlayerActivity : AppCompatActivity() {
+class PlayerActivity : AppCompatActivity(), PlayerAdapter.Listener {
 
     private var adapter: PlayerAdapter? = null
     private var position = 0
@@ -41,7 +45,7 @@ class PlayerActivity : AppCompatActivity() {
         }
         position = PlayerQueue.start.coerceIn(0, clips.size - 1)
 
-        adapter = PlayerAdapter(clips).also {
+        adapter = PlayerAdapter(clips, this).also {
             it.selected = position
             pager().adapter = it
         }
@@ -64,6 +68,45 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     private fun pager() = findViewById<ViewPager2>(R.id.pager)
+
+    // region the rail
+
+    override fun onProfile(author: String) {
+        openLink("https://www.tiktok.com/@$author")
+    }
+
+    override fun onLike(clip: Clip): Boolean = Likes.toggle(this, clip.id)
+
+    /**
+     * Comments open inside the app even for a clip that is not downloaded: the reader answers by clip
+     * id, and the file it writes is the same one the offline feed reads later.
+     */
+    override fun onComment(clip: Clip) {
+        CommentSheet.show(this, clip.id, clip.title, clip.stat.comments) { id ->
+            val got = withContext(Dispatchers.IO) { Comments.fetch(this@PlayerActivity, id) }
+            Backup.snapshot(this@PlayerActivity)
+            !got.failed
+        }
+    }
+
+    override fun onSave(clip: Clip) = download(clip)
+
+    override fun onShare(clip: Clip) {
+        val send = Intent(Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(Intent.EXTRA_TEXT, clip.page)
+        }
+        runCatching { startActivity(Intent.createChooser(send, "Share")) }
+            .onFailure { status.text = "No app to share with" }
+    }
+
+    private fun openLink(url: String) {
+        if (url.isBlank()) return
+        runCatching { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) }
+            .onFailure { status.text = "No browser for this link" }
+    }
+
+    // endregion
 
     private fun refreshSaveLabel(clip: Clip?) {
         if (clip == null) return

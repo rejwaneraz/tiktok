@@ -77,6 +77,21 @@ The profile is a scroll view full of buttons, so a page-level touch listener nev
 `dispatchTouchEvent`, before any child, and once it is clearly sideways the activity takes the rest of
 the gesture.
 
+### 2026-10-20 — the rail is TikTok's shape, and it is the same in both players
+The rail follows TikTok's own grid: 44dp avatar with a 1.5dp white ring and a 20dp red plus on its
+bottom edge, 32dp icons, 12sp bold counts with a shadow, 12dp between groups, 6dp from the right edge.
+A heart turns the accent red (icon and number), a save turns the bookmark yellow — TikTok's own
+choice, not our cyan. The same rail and the same single-tap/double-tap rules live in the online
+preview, so a clip does not look like a different app before it is downloaded.
+
+*Honest limit:* the glyphs are our own vectors drawn to TikTok's silhouettes; their exact artwork is
+not something we have.
+
+### 2026-10-20 — a double tap never pauses
+The page used to carry a click listener as well as a gesture detector, so the first tap of a double
+tap fired play/pause before the heart. The click is gone; a single tap is confirmed only when the
+second one never arrives.
+
 ## Measured, from a real request (2026-10-20)
 
 `https://www.tikwm.com/api/?url=<video>&hd=1` → 200, 7.2 KB, 2.1 s: `duration`, `size`, `hd_size`,

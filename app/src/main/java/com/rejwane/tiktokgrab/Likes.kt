@@ -17,13 +17,23 @@ object Likes {
 
     fun isLiked(context: Context, video: LocalVideo) = key(video) in ids(context)
 
+    /** The online preview has no file yet, so it is hearted by clip id alone. */
+    fun isLiked(context: Context, clipId: String) = clipId.isNotBlank() && clipId in ids(context)
+
+    fun toggle(context: Context, clipId: String): Boolean = flip(context, clipId)
+
     /** Returns whether the video is liked after the tap. */
     fun toggle(context: Context, video: LocalVideo): Boolean {
+        val on = flip(context, key(video))
+        return on
+    }
+
+    private fun flip(context: Context, key: String): Boolean {
         val now = HashSet(ids(context))
-        val on = if (key(video) in now) {
-            now.remove(key(video)); false
+        val on = if (key in now) {
+            now.remove(key); false
         } else {
-            now.add(key(video)); true
+            now.add(key); true
         }
         prefs(context).edit().putStringSet(KEY, now).apply()
         return on

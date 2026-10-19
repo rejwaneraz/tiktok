@@ -1,6 +1,5 @@
 package com.rejwane.tiktokgrab
 
-import android.os.SystemClock
 import android.view.GestureDetector
 import android.view.LayoutInflater
 import android.view.MotionEvent
@@ -69,9 +68,15 @@ class OfflineAdapter(
         private var ready = false
         private var expanded = false
         private var current: LocalVideo? = null
-        private var lastBurst = 0L
         private val tapper = GestureDetector(itemView.context,
             object : GestureDetector.SimpleOnGestureListener() {
+                override fun onSingleTapConfirmed(event: MotionEvent): Boolean {
+                    // Fires only when the second tap never came, which is what stops a double tap
+                    // from pausing the video it is meant to heart.
+                    playOrPause()
+                    return true
+                }
+
                 override fun onDoubleTap(event: MotionEvent): Boolean {
                     current?.let { burst(it, event.x, event.y) }
                     return true
@@ -161,7 +166,6 @@ class OfflineAdapter(
 
         /** TikTok's double tap: the video is hearted and a heart pops where the finger landed. */
         private fun burst(clip: LocalVideo, x: Float, y: Float) {
-            lastBurst = SystemClock.uptimeMillis()
             if (!Likes.isLiked(itemView.context, clip)) {
                 Likes.toggle(itemView.context, clip)
                 paint(clip)
@@ -179,17 +183,12 @@ class OfflineAdapter(
             }.start()
         }
 
-        fun onTap() {
-            if (SystemClock.uptimeMillis() - lastBurst < 400) return
-            playOrPause()
-        }
-
         /** Hearts and bookmarks are ours; the numbers beside them are TikTok's own. */
         private fun paint(clip: LocalVideo) {
             val context = itemView.context
             val liked = Likes.isLiked(context, clip)
             tint(like, likeCount, liked, R.color.accent)
-            tint(mark, markCount, Collection.has(context, clip), R.color.cyan)
+            tint(mark, markCount, Collection.has(context, clip), R.color.saved)
         }
 
         private fun tint(icon: ImageView, label: TextView, on: Boolean, color: Int) {
@@ -250,7 +249,8 @@ class OfflineAdapter(
             if (at != RecyclerView.NO_POSITION) listener.onLongPress(at)
             true
         }
-        holder.itemView.setOnClickListener { holder.onTap() }
+        // No click listener: the detector's single-tap is what toggles play, so a double tap never
+        // fires a pause on its way to the heart.
         holder.watch(listener)
     }
 

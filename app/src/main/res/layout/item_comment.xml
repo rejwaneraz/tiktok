@@ -40,15 +40,20 @@
             android:textColor="@color/text"
             android:textSize="15sp" />
 
-        <ImageView
-            android:id="@+id/cmtPhoto"
-            android:layout_width="128dp"
-            android:layout_height="128dp"
+        <HorizontalScrollView
+            android:id="@+id/cmtPhotosScroll"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
-            android:background="@drawable/card_bg"
-            android:contentDescription="@null"
-            android:scaleType="centerCrop"
-            android:visibility="gone" />
+            android:scrollbars="none"
+            android:visibility="gone">
+
+            <LinearLayout
+                android:id="@+id/cmtPhotos"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal" />
+        </HorizontalScrollView>
 
         <LinearLayout
             android:layout_width="match_parent"

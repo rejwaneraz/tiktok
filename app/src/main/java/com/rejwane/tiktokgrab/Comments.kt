@@ -4,17 +4,17 @@ import android.content.Context
 import org.json.JSONArray
 import org.json.JSONObject
 
-/** One saved comment. `photo` is a file name inside Backup/photos, empty when there is none. */
+/** One saved comment. `photos` are file names inside Backup/photos, in the order the comment shows them. */
 data class Comment(
     val id: String,
     val name: String,
     val text: String,
     val seconds: Long,
     val likes: Long,
-    val photo: String = "",
+    val photos: List<String> = emptyList(),
     val replies: Int = 0,
-    /** Where the picture lives at the reader — fetched only when the comment is tapped. */
-    val photoUrl: String = ""
+    /** Where the pictures live at the reader — fetched only when the row is tapped. */
+    val photoUrls: List<String> = emptyList()
 ) {
     fun ago(): String = GridAdapter.ago(seconds)
 }
@@ -56,9 +56,9 @@ object Comments {
                 text = o.optString("text"),
                 seconds = o.optLong("t"),
                 likes = o.optLong("l"),
-                photo = o.optString("p"),
+                photos = listOfNotNull(o.opt("p")).flatMap { strings(it) },
                 replies = o.optInt("r"),
-                photoUrl = o.optString("u")
+                photoUrls = listOfNotNull(o.opt("u")).flatMap { strings(it) }
             )
         }
     }
@@ -129,6 +129,7 @@ object Comments {
         val text = item.optString("text").trim()
         if (id.isBlank() || text.isBlank()) return null
         val user = item.optJSONObject("user") ?: JSONObject()
+        val urls = allUrls(item.opt("images"))
         return Comment(
             id = id,
             name = user.optString("nickname").ifBlank { user.optString("unique_id") }
@@ -136,33 +137,48 @@ object Comments {
             text = text,
             seconds = item.optLong("create_time"),
             likes = item.optLong("digg_count"),
-            photo = savedPhoto(context, clipId, id),
+            photos = savedPhotos(context, clipId, id, urls.size),
             replies = item.optInt("reply_total"),
-            photoUrl = firstUrl(item.opt("images")).orEmpty()
+            photoUrls = urls
         )
     }
 
-    /** Only pictures that a comment actually carries cost data — everything else stays generic. */
-    private fun savedPhoto(context: Context, clipId: String, id: String): String {
-        val name = "${clipId}_$id.jpg"
-        return if (Store.exists(context, PHOTOS, name)) name else ""
-    }
+    /** Every picture a comment carries, in order; the file name is index-based so the order holds. */
+    private fun photoName(clipId: String, commentId: String, index: Int) =
+        "${clipId}_${commentId}_$index.jpg"
+
+    private fun savedPhotos(context: Context, clipId: String, id: String, count: Int): List<String> =
+        (0 until count).mapNotNull { i ->
+            val name = photoName(clipId, id, i)
+            if (Store.exists(context, PHOTOS, name)) name else null
+        }
 
     /**
-     * A picture is pulled when the comment is tapped, never during a batch: photos are the part that
-     * would quietly turn a 40 KB file into megabytes.
+     * Pictures are pulled when the comment is tapped, never during a batch: they are the part that
+     * would quietly turn a 40 KB file into megabytes. Every picture the comment carries is saved.
      */
-    fun downloadPhoto(context: Context, clipId: String, comment: Comment): Boolean {
-        if (comment.photoUrl.isBlank()) return false
-        val name = "${clipId}_${comment.id}.jpg"
-        return Store.download(context, PHOTOS, name, comment.photoUrl)
+    fun downloadPhotos(context: Context, clipId: String, comment: Comment): Boolean {
+        if (comment.photoUrls.isEmpty()) return false
+        var got = false
+        comment.photoUrls.forEachIndexed { i, url ->
+            if (Store.download(context, PHOTOS, photoName(clipId, comment.id, i), url)) got = true
+        }
+        return got
     }
 
-    private fun firstUrl(value: Any?): String? = when (value) {
-        is String -> value.takeIf { it.startsWith("http") }
-        is JSONArray -> (0 until value.length()).mapNotNull { firstUrl(value.opt(it)) }.firstOrNull()
-        is JSONObject -> value.keys().asSequence().mapNotNull { firstUrl(value.opt(it)) }.firstOrNull()
-        else -> null
+    /** Accepts a bare string, an array of strings, or an array of objects that carry one. */
+    private fun allUrls(value: Any?): List<String> = when (value) {
+        is String -> if (value.startsWith("http")) listOf(value) else emptyList()
+        is JSONArray -> (0 until value.length()).flatMap { allUrls(value.opt(it)) }
+        is JSONObject -> value.keys().asSequence().flatMap { allUrls(value.opt(it)) }.toList()
+        else -> emptyList()
+    }.distinct()
+
+    /** Old files stored one string; new ones store an array, so both are read. */
+    private fun strings(value: Any?): List<String> = when (value) {
+        is JSONArray -> (0 until value.length()).map { value.optString(it) }.filter { it.isNotBlank() }
+        is String -> if (value.isBlank()) emptyList() else listOf(value)
+        else -> emptyList()
     }
 
     /** Keeps what we already had and adds what is new, then writes the whole set back. */
@@ -183,7 +199,8 @@ object Comments {
             array.put(JSONObject()
                 .put("id", comment.id).put("name", comment.name).put("text", comment.text)
                 .put("t", comment.seconds).put("l", comment.likes)
-                .put("p", comment.photo).put("r", comment.replies).put("u", comment.photoUrl))
+                .put("p", JSONArray(comment.photos)).put("r", comment.replies)
+                .put("u", JSONArray(comment.photoUrls)))
         }
         Store.writeText(context, FOLDER, "$clipId.json", array.toString())
     }

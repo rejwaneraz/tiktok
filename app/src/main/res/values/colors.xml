@@ -12,6 +12,8 @@
     <color name="on_accent">#FFFFFF</color>
     <color name="cyan">#00A89B</color>
     <color name="selected">#12A150</color>
+    <!-- TikTok marks a saved clip with its yellow bookmark, not the accent red. -->
+    <color name="saved">#FACE15</color>
 
     <color name="field">#F1F1F2</color>
     <color name="pill">#F1F1F2</color>

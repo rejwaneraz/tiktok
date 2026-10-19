@@ -1,6 +1,5 @@
 package com.rejwane.tiktokgrab
 
-import android.content.ContentValues
 import android.content.Context
 import android.database.Cursor
 import android.graphics.Bitmap
@@ -88,7 +87,7 @@ object LocalVideos {
                 name = file.name,
                 caption = caption,
                 clipId = clipId,
-                author = Vault.authorOf(context, clipId, ""),
+                author = Vault.authorOf(context, clipId.ifBlank { "file:" + file.name }, ""),
                 bytes = file.length(),
                 durationMs = 0L,
                 addedAt = file.lastModified() / 1000
@@ -207,22 +206,14 @@ object LocalVideos {
         return gone
     }
 
-    /** Re-files a video under another author, which is how it changes profile. */
+    /**
+     * Moving a clip between profiles is a record, never a folder. A file that arrived without a clip
+     * id (dropped into the folder by hand) is filed under its own name, so it still moves — and it
+     * stays in the one folder the library scans instead of vanishing into a sub-folder.
+     */
     fun moveTo(context: Context, video: LocalVideo, author: String): Boolean {
-        if (video.clipId.isNotBlank()) return Vault.setAuthor(context, video.clipId, author)
-        return runCatching {
-            val folder = sanitize(author)
-            if (video.uri.scheme == "file") {
-                val dir = File(Vault.dir(context), folder)
-                dir.mkdirs()
-                File(video.uri.path!!).renameTo(File(dir, video.name))
-            } else {
-                val values = ContentValues().apply {
-                    put(MediaStore.MediaColumns.RELATIVE_PATH, "Download/$ROOT/$folder/")
-                }
-                context.contentResolver.update(video.uri, values, null, null) > 0
-            }
-        }.getOrDefault(false)
+        val key = video.clipId.ifBlank { "file:" + video.name }
+        return Vault.setAuthor(context, key, author)
     }
 }
 

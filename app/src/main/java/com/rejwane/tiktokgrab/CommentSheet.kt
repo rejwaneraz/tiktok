@@ -23,7 +23,8 @@ import kotlinx.coroutines.withContext
  */
 object CommentSheet {
 
-    fun show(host: AppCompatActivity, video: LocalVideo, pull: suspend (LocalVideo) -> Boolean) {
+    fun show(host: AppCompatActivity, video: LocalVideo, known: Long = -1L,
+             pull: suspend (LocalVideo) -> Boolean) {
         val view = LayoutInflater.from(host).inflate(R.layout.sheet_comments, null)
         val title = view.findViewById<TextView>(R.id.commentsTitle)
         val list = view.findViewById<RecyclerView>(R.id.commentsList)
@@ -36,7 +37,7 @@ object CommentSheet {
         dialog.behavior.peekHeight = (host.resources.displayMetrics.heightPixels * 0.75f).toInt()
         view.findViewById<TextView>(R.id.commentsClose).setOnClickListener { dialog.dismiss() }
 
-        val total = ClipStats.of(host, video.clipId).comments
+        val total = if (known >= 0L) known else ClipStats.of(host, video.clipId).comments
 
         var rows: CommentAdapter? = null
 
@@ -46,11 +47,11 @@ object CommentSheet {
             note.text = message
             note.visibility = if (message.isBlank()) View.GONE else View.VISIBLE
             val adapter = CommentAdapter(comments) { comment ->
-                // A picture is the only part of a comment that costs real data, so it comes down when
-                // the reader asks for it and not a moment before.
+                // Pictures are the only part of a comment that costs real data, so they come down
+                // when the reader asks for them and not a moment before.
                 host.lifecycleScope.launch {
                     val got = withContext(Dispatchers.IO) {
-                        Comments.downloadPhoto(host, video.clipId, comment)
+                        Comments.downloadPhotos(host, video.clipId, comment)
                     }
                     if (got) rows?.photoReady(comment.id)
                 }
@@ -78,6 +79,17 @@ object CommentSheet {
         }
         dialog.show()
     }
+
+    /**
+     * The online preview has no file yet, so the same sheet is opened over a clip id — its own
+     * comment count comes from the listing that put the clip on screen.
+     */
+    fun show(host: AppCompatActivity, clipId: String, title: String, known: Long,
+             pull: suspend (String) -> Boolean) {
+        if (clipId.isBlank()) return
+        val stub = LocalVideo(android.net.Uri.EMPTY, title, title, clipId, "", 0L, 0L, 0L)
+        show(host, stub, known) { video -> pull(video.clipId) }
+    }
 }
 
 class CommentAdapter(
@@ -96,11 +108,36 @@ class CommentAdapter(
         val avatar: ImageView = view.findViewById(R.id.cmtAvatar)
         val name: TextView = view.findViewById(R.id.cmtName)
         val text: TextView = view.findViewById(R.id.cmtText)
-        val photo: ImageView = view.findViewById(R.id.cmtPhoto)
+        val photosScroll: android.widget.HorizontalScrollView = view.findViewById(R.id.cmtPhotosScroll)
+        val photos: android.widget.LinearLayout = view.findViewById(R.id.cmtPhotos)
         val time: TextView = view.findViewById(R.id.cmtTime)
         val replies: TextView = view.findViewById(R.id.cmtReplies)
         val like: ImageView = view.findViewById(R.id.cmtLike)
         val likes: TextView = view.findViewById(R.id.cmtLikes)
+    }
+
+    /** One thumbnail per picture the comment carries; a missing one is the download button. */
+    private fun picture(context: Context, uri: android.net.Uri?, comment: Comment): ImageView {
+        val density = context.resources.displayMetrics.density
+        val size = (104 * density).toInt()
+        val view = ImageView(context)
+        view.layoutParams = android.widget.LinearLayout.LayoutParams(size, size).apply {
+            marginEnd = (8 * density).toInt()
+        }
+        view.scaleType = ImageView.ScaleType.CENTER_CROP
+        view.setBackgroundResource(R.drawable.card_bg)
+        if (uri != null) {
+            view.load(uri) { crossfade(false) }
+            view.setOnClickListener {
+                ViewerQueue.uri = uri
+                ViewerQueue.title = comment.name
+                context.startActivity(Intent(context, ImageViewerActivity::class.java))
+            }
+        } else {
+            view.setImageResource(R.drawable.ic_grid)
+            view.setOnClickListener { onPhoto(comment) }
+        }
+        return view
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, type: Int) = Holder(
@@ -120,26 +157,20 @@ class CommentAdapter(
         holder.replies.visibility = if (comment.replies > 0) View.VISIBLE else View.GONE
         holder.likes.text = if (comment.likes > 0) GridAdapter.short(comment.likes) else ""
 
-        val picture = if (comment.photo.isBlank()) null else Store.find(context, "photos", comment.photo)
+        holder.photos.removeAllViews()
+        val saved = comment.photos.mapNotNull { name ->
+            Store.find(context, "photos", name)?.let { name to it }
+        }
         when {
-            picture != null -> {
-                holder.photo.visibility = View.VISIBLE
-                holder.photo.load(picture) { crossfade(false) }
-                holder.photo.setOnClickListener {
-                    ViewerQueue.uri = picture
-                    ViewerQueue.title = comment.name
-                    context.startActivity(Intent(context, ImageViewerActivity::class.java))
-                }
+            saved.isNotEmpty() -> {
+                holder.photosScroll.visibility = View.VISIBLE
+                saved.forEach { (_, uri) -> holder.photos.addView(picture(context, uri, comment)) }
             }
-            comment.photoUrl.isNotBlank() -> {
-                holder.photo.visibility = View.VISIBLE
-                holder.photo.setImageResource(R.drawable.ic_grid)
-                holder.photo.setOnClickListener { onPhoto(comment) }
+            comment.photoUrls.isNotEmpty() -> {
+                holder.photosScroll.visibility = View.VISIBLE
+                comment.photoUrls.forEach { _ -> holder.photos.addView(picture(context, null, comment)) }
             }
-            else -> {
-                holder.photo.visibility = View.GONE
-                holder.photo.setOnClickListener(null)
-            }
+            else -> holder.photosScroll.visibility = View.GONE
         }
 
         fun paintHeart(on: Boolean) {
