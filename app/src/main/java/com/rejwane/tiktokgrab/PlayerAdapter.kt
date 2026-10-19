@@ -148,7 +148,8 @@ class PlayerAdapter(
 
         private fun paintSave(clip: Clip) {
             val saved = clip.id in Downloader.doneIds(itemView.context)
-            val color = itemView.context.getColor(if (saved) R.color.saved else R.color.on_video)
+            // The slot is a download arrow here, so "done" reads green rather than a bookmark yellow.
+            val color = itemView.context.getColor(if (saved) R.color.selected else R.color.on_video)
             mark.setColorFilter(color)
             markCount.setTextColor(color)
         }

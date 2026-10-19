@@ -52,7 +52,7 @@
             android:layout_height="32dp"
             android:layout_marginTop="12dp"
             android:contentDescription="@null"
-            android:src="@drawable/ic_like" />
+            android:src="@drawable/rail_heart" />
 
         <TextView
             android:id="@+id/pLikeCount"
@@ -71,7 +71,7 @@
             android:layout_height="32dp"
             android:layout_marginTop="12dp"
             android:contentDescription="@null"
-            android:src="@drawable/ic_comment" />
+            android:src="@drawable/rail_comment" />
 
         <TextView
             android:id="@+id/pCommentCount"
@@ -90,7 +90,7 @@
             android:layout_height="32dp"
             android:layout_marginTop="12dp"
             android:contentDescription="@null"
-            android:src="@drawable/ic_bookmark" />
+            android:src="@drawable/rail_download" />
 
         <TextView
             android:id="@+id/pMarkCount"
@@ -109,7 +109,7 @@
             android:layout_height="32dp"
             android:layout_marginTop="12dp"
             android:contentDescription="@null"
-            android:src="@drawable/ic_share" />
+            android:src="@drawable/rail_share" />
 
         <TextView
             android:id="@+id/pShareCount"

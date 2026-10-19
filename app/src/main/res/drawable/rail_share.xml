@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Traced from the reference sheet: the glyph is the picture's own outline, scaled into 24 x 24. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:fillType="evenOdd"
+        android:pathData="M12.92,4.12L13.71,4.12L14.49,4.65L15.28,5.70L15.94,6.22L16.46,6.22L17.38,7.01L18.69,8.59L19.61,9.38L20.14,9.38L20.93,9.90L21.98,10.95L22.50,11.74L22.50,12.26L22.11,12.92L21.32,13.71L20.66,14.10L20.14,14.10L19.22,14.89L17.91,16.46L16.99,17.25L16.46,17.25L15.68,17.91L14.62,19.22L13.71,19.74L12.92,19.48L12.53,18.43L12.53,16.59L11.34,15.68L8.98,15.68L6.62,16.20L4.26,17.25L2.68,18.17L1.89,18.96L1.50,18.69L1.50,17.38L2.02,15.54L3.08,13.18L4.78,11.08L7.14,9.24L9.38,8.19L11.47,7.93L12.53,6.88L12.53,5.04Z" />
+</vector>

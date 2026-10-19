@@ -15,6 +15,9 @@
     <!-- TikTok marks a saved clip with its yellow bookmark, not the accent red. -->
     <color name="saved">#FACE15</color>
 
+    <!-- The launcher mark sits on black, exactly as the artwork was drawn. -->
+    <color name="icon_bg">#000000</color>
+
     <color name="field">#F1F1F2</color>
     <color name="pill">#F1F1F2</color>
     <color name="ripple">#1A161823</color>

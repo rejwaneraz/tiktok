@@ -115,6 +115,13 @@ remembered. A batch download runs with a foreground service and a progress notif
 the app does not look like stopping; the service owns no work and every call into it is wrapped, so
 it can never break the loop.
 
+### 2026-10-20 — the icons are traced, not drawn
+The rail glyphs come from the reference sheet by walking the pixel outline, simplifying it
+(Douglas–Peucker) and smoothing it (Chaikin), scaled into a 24 x 24 viewport. Each icon is one
+vector file of 0.7–1.2 KB, so it stays sharp at every size and a state is a tint, not a second file.
+The heart, bubble, arrow, bookmark and note are the picture's own shapes; the launcher mark is the
+artwork itself, with a black adaptive background and the disc inside the safe zone.
+
 ## Measured, from a real request (2026-10-20)
 
 `https://www.tikwm.com/api/?url=<video>&hd=1` → 200, 7.2 KB, 2.1 s: `duration`, `size`, `hd_size`,
