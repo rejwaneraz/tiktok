@@ -1,6 +1,7 @@
 package com.rejwane.tiktokgrab
 
 import android.content.Context
+import android.net.Uri
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -169,15 +170,41 @@ object Comments {
         return got
     }
 
+    /**
+     * Pictures that are actually on disk, in the order the comment carries them. The names are
+     * deterministic, so a picture downloaded a moment ago is found even though the comment JSON was
+     * written before it existed.
+     */
+    fun pictures(context: Context, clipId: String, comment: Comment): List<Uri> {
+        val count = maxOf(comment.photoUrls.size, comment.photos.size)
+        return (0 until count).mapNotNull { i ->
+            Store.find(context, PHOTOS, photoName(clipId, comment.id, i))
+        }
+    }
+
+    /** True while at least one picture this comment carries is not on disk yet. */
+    fun hasMissingPictures(context: Context, clipId: String, comment: Comment): Boolean {
+        if (comment.photoUrls.isEmpty()) return false
+        return comment.photoUrls.indices.any { i ->
+            Store.find(context, PHOTOS, photoName(clipId, comment.id, i)) == null
+        }
+    }
+
     /** Comments that say they carry pictures we have not put on disk yet. */
-    fun pendingPictures(comments: List<Comment>): List<Comment> =
-        comments.filter { it.photoUrls.isNotEmpty() && it.photos.size < it.photoUrls.size }
+    fun pendingPictures(context: Context, clipId: String, comments: List<Comment>): List<Comment> =
+        comments.filter { hasMissingPictures(context, clipId, it) }
 
     /** Accepts a bare string, an array of strings, or an array of objects that carry one. */
     private fun allUrls(value: Any?): List<String> = when (value) {
         is String -> if (value.startsWith("http")) listOf(value) else emptyList()
         is JSONArray -> (0 until value.length()).flatMap { allUrls(value.opt(it)) }
-        is JSONObject -> value.keys().asSequence().flatMap { allUrls(value.opt(it)) }.toList()
+        // One picture per object: the first of its known keys, never every string inside it (that
+        // used to turn one picture with a thumbnail into two "pictures").
+        is JSONObject -> {
+            val one = listOf("url", "image_url", "display_image", "url_list")
+                .firstNotNullOfOrNull { key -> value.opt(key)?.let { allUrls(it).firstOrNull() } }
+            if (one != null) listOf(one) else emptyList()
+        }
         else -> emptyList()
     }.distinct()
 

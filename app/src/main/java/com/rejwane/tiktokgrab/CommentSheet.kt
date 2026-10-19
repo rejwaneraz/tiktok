@@ -46,7 +46,7 @@ object CommentSheet {
             title.text = "$shown ${host.getString(R.string.comments_suffix)}"
             note.text = message
             note.visibility = if (message.isBlank()) View.GONE else View.VISIBLE
-            val adapter = CommentAdapter(comments) { comment ->
+            val adapter = CommentAdapter(comments, video.clipId) { comment ->
                 // Pictures are the only part of a comment that costs real data, so they come down
                 // when the reader asks for them and not a moment before.
                 host.lifecycleScope.launch {
@@ -60,7 +60,7 @@ object CommentSheet {
             list.adapter = adapter
             // A picture is part of reading the comment, so it comes down when the sheet opens —
             // missing ones only, once, and never during a batch fetch.
-            val pending = Comments.pendingPictures(comments)
+            val pending = Comments.pendingPictures(host, video.clipId, comments)
             if (pending.isNotEmpty()) {
                 host.lifecycleScope.launch {
                     withContext(Dispatchers.IO) {
@@ -108,6 +108,7 @@ object CommentSheet {
 
 class CommentAdapter(
     private val items: List<Comment>,
+    private val clipId: String,
     private val onPhoto: (Comment) -> Unit
 ) : RecyclerView.Adapter<CommentAdapter.Holder>() {
 
@@ -174,13 +175,13 @@ class CommentAdapter(
         holder.likes.text = if (comment.likes > 0) GridAdapter.short(comment.likes) else ""
 
         holder.photos.removeAllViews()
-        val saved = comment.photos.mapNotNull { name ->
-            Store.find(context, "photos", name)?.let { name to it }
-        }
+        // Read from the folder, not from the JSON: a picture downloaded a second ago must show up
+        // without waiting for the comment file to be written again.
+        val saved = Comments.pictures(context, clipId, comment)
         when {
             saved.isNotEmpty() -> {
                 holder.photosScroll.visibility = View.VISIBLE
-                saved.forEach { (_, uri) -> holder.photos.addView(picture(context, uri, comment)) }
+                saved.forEach { uri -> holder.photos.addView(picture(context, uri, comment)) }
             }
             comment.photoUrls.isNotEmpty() -> {
                 holder.photosScroll.visibility = View.VISIBLE
