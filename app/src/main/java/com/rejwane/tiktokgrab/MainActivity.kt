@@ -225,8 +225,9 @@ class MainActivity : AppCompatActivity() {
                         "", "${inLibrary.size} files · ${GridAdapter.mb(inLibrary.sumOf { it.length() })}",
                         "A gallery will not show them and a reinstall will not take them.")
                 else lines("Turn the switch ON for TikTok Grab on the page that opens next.", "",
-                    "Without it the system stores the videos and deletes them when this app goes —",
-                    "that is what happened to the last library. The app still works either way."))
+                    "Without it a download is refused instead of dropped into the gallery, because the",
+                    "system deletes those files when this app goes — that is what happened to the last",
+                    "library."))
                 if (!had) Vault.requestAccess(this)
             },
             SettingsAdapter.Row("Profile pictures", "${Authors.cachedAvatars(this)} cached", "Storage") {
@@ -495,6 +496,11 @@ class MainActivity : AppCompatActivity() {
 
     private fun startDownloads(clips: List<Clip>) {
         if (clips.isEmpty()) return
+        if (!Vault.granted(this)) {
+            // Refuse out loud instead of letting the system keep a copy it will delete with the app.
+            statusView.text = "All files access is off - turn it on in Settings, then try again"
+            return
+        }
         failed.clear()
         loadBtn.isEnabled = false
         lastPercent = -1
@@ -545,7 +551,9 @@ class MainActivity : AppCompatActivity() {
         super.onResume()
         showLoginState()
         if (section == LIBRARY) refreshLibrary()
-        // The switch is granted on a system page, and we come back to this same screen.
+        // The switch is granted on a system page, and we come back to this same screen, so the row
+        // that says "Needed" is repainted without asking the user to tap anything.
+        if (section == SETTINGS) showSettings()
         moveOldVideos()
     }
 

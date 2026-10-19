@@ -1,6 +1,7 @@
 package com.rejwane.tiktokgrab
 
 import android.content.Context
+import android.content.Intent
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -12,7 +13,9 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import coil.load
 import com.google.android.material.bottomsheet.BottomSheetDialog
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * The comments sheet, filled from the file we saved at download time — so it works with no signal.
@@ -35,12 +38,25 @@ object CommentSheet {
 
         val total = ClipStats.of(host, video.clipId).comments
 
+        var rows: CommentAdapter? = null
+
         fun paint(comments: List<Comment>, message: String = "") {
             val shown = if (total > 0) GridAdapter.short(total) else comments.size.toString()
             title.text = "$shown ${host.getString(R.string.comments_suffix)}"
             note.text = message
             note.visibility = if (message.isBlank()) View.GONE else View.VISIBLE
-            list.adapter = CommentAdapter(comments)
+            val adapter = CommentAdapter(comments) { comment ->
+                // A picture is the only part of a comment that costs real data, so it comes down when
+                // the reader asks for it and not a moment before.
+                host.lifecycleScope.launch {
+                    val got = withContext(Dispatchers.IO) {
+                        Comments.downloadPhoto(host, video.clipId, comment)
+                    }
+                    if (got) rows?.photoReady(comment.id)
+                }
+            }
+            rows = adapter
+            list.adapter = adapter
         }
 
         val saved = Comments.load(host, video.clipId)
@@ -64,7 +80,16 @@ object CommentSheet {
     }
 }
 
-class CommentAdapter(private val items: List<Comment>) : RecyclerView.Adapter<CommentAdapter.Holder>() {
+class CommentAdapter(
+    private val items: List<Comment>,
+    private val onPhoto: (Comment) -> Unit
+) : RecyclerView.Adapter<CommentAdapter.Holder>() {
+
+    /** The tapped picture has landed on disk: repaint just that row. */
+    fun photoReady(commentId: String) {
+        val at = items.indexOfFirst { it.id == commentId }
+        if (at >= 0) notifyItemChanged(at)
+    }
 
     class Holder(view: View) : RecyclerView.ViewHolder(view) {
         val row: View = view
@@ -96,11 +121,25 @@ class CommentAdapter(private val items: List<Comment>) : RecyclerView.Adapter<Co
         holder.likes.text = if (comment.likes > 0) GridAdapter.short(comment.likes) else ""
 
         val picture = if (comment.photo.isBlank()) null else Store.find(context, "photos", comment.photo)
-        if (picture != null) {
-            holder.photo.visibility = View.VISIBLE
-            holder.photo.load(picture) { crossfade(false) }
-        } else {
-            holder.photo.visibility = View.GONE
+        when {
+            picture != null -> {
+                holder.photo.visibility = View.VISIBLE
+                holder.photo.load(picture) { crossfade(false) }
+                holder.photo.setOnClickListener {
+                    ViewerQueue.uri = picture
+                    ViewerQueue.title = comment.name
+                    context.startActivity(Intent(context, ImageViewerActivity::class.java))
+                }
+            }
+            comment.photoUrl.isNotBlank() -> {
+                holder.photo.visibility = View.VISIBLE
+                holder.photo.setImageResource(R.drawable.ic_grid)
+                holder.photo.setOnClickListener { onPhoto(comment) }
+            }
+            else -> {
+                holder.photo.visibility = View.GONE
+                holder.photo.setOnClickListener(null)
+            }
         }
 
         fun paintHeart(on: Boolean) {

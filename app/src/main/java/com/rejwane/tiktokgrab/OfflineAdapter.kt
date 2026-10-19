@@ -11,12 +11,14 @@ import android.widget.ImageView
 import android.widget.ProgressBar
 import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
-import kotlin.math.abs
-import kotlin.math.max
 
 /**
  * The swipe feed, laid out the way TikTok does it: caption and sound bottom-left, the action rail
  * down the right edge. Local files only — no cookies, no user agent, nothing that needs a network.
+ *
+ * The page does not decide anything about gestures any more. It reports every touch to the activity,
+ * which owns one state machine for the whole feed; that is what stopped a tab change from rebuilding
+ * the list and restarting the video.
  */
 class OfflineAdapter(
     private var clips: List<LocalVideo>,
@@ -28,13 +30,19 @@ class OfflineAdapter(
         fun onOpenProfile(author: String)
         fun onComments(video: LocalVideo)
         fun onShare(video: LocalVideo)
-        fun onSwipe(toFollowing: Boolean)
+
+        /** Every horizontal or vertical decision is made in one place: returns true when we took the drag. */
+        fun onDrag(event: MotionEvent, page: View): Boolean
     }
 
     private val holders = HashMap<Int, Holder>()
 
     /** ViewPager2 skips onPageSelected for page 0, so the adapter starts that one itself. */
     var selected = -1
+
+    init {
+        setHasStableIds(true)
+    }
 
     class Holder(view: View) : RecyclerView.ViewHolder(view) {
         val video: android.widget.VideoView = view.findViewById(R.id.localVideo)
@@ -56,14 +64,12 @@ class OfflineAdapter(
         val share: ImageView = view.findViewById(R.id.railShare)
         val shareCount: TextView = view.findViewById(R.id.railShareCount)
         var boundPosition = -1
+        var shows: String = ""
         private var wantsPlay = false
         private var ready = false
         private var expanded = false
         private var current: LocalVideo? = null
         private var lastBurst = 0L
-        private var downX = 0f
-        private var downY = 0f
-        private var strayed = 0f
         private val tapper = GestureDetector(itemView.context,
             object : GestureDetector.SimpleOnGestureListener() {
                 override fun onDoubleTap(event: MotionEvent): Boolean {
@@ -75,15 +81,45 @@ class OfflineAdapter(
         fun bind(clip: LocalVideo, listener: Listener) {
             val context = itemView.context
             val info = Authors.get(context, clip.author)
+            // The same clip coming back after a tab swap must not be loaded a second time: the
+            // player keeps its position and the video never restarts.
+            val same = current?.uri == clip.uri
             current = clip
+            shows = clip.uri.toString()
+            if (same) return paintEverything(clip, info, listener, reuse = true)
+
             ready = false
+            wantsPlay = false
             expanded = false
-            author.text = "@${info.display(clip.author)}"
-            meta.text = "${clip.day()} · ${clip.size()}"
             caption.maxLines = 2
+            paintEverything(clip, info, listener, reuse = false)
+            video.setOnPreparedListener { mp ->
+                ready = true
+                mp.isLooping = true
+                if (video.duration > 0) {
+                    meta.text = "${clip.day()} · ${GridAdapter.clock(video.duration / 1000)} · ${clip.size()}"
+                }
+                if (wantsPlay) start()
+            }
+            video.setOnErrorListener { _, _, _ ->
+                meta.text = "Cannot play this file"
+                true
+            }
+            video.setVideoURI(clip.uri)
+            pauseIcon.visibility = View.VISIBLE
+        }
+
+        private fun paintEverything(clip: LocalVideo, info: AuthorInfo, listener: Listener, reuse: Boolean) {
+            val context = itemView.context
+            author.text = "@${info.display(clip.author)}"
+            val length = if (ready && video.duration > 0) " · ${GridAdapter.clock(video.duration / 1000)}" else ""
+            meta.text = "${clip.day()}$length · ${clip.size()}"
+            if (!reuse) {
+                caption.maxLines = 2
+                more.text = "See more"
+                more.visibility = if (clip.caption.length > 68) View.VISIBLE else View.GONE
+            }
             caption.text = clip.caption
-            more.visibility = if (clip.caption.length > 68) View.VISIBLE else View.GONE
-            more.text = "See more"
             caption.setOnClickListener { toggle() }
             more.setOnClickListener { toggle() }
 
@@ -113,49 +149,13 @@ class OfflineAdapter(
             }
             comment.setOnClickListener { listener.onComments(clip) }
             share.setOnClickListener { listener.onShare(clip) }
-
-            video.setOnPreparedListener { mp ->
-                ready = true
-                mp.isLooping = true
-                if (video.duration > 0) {
-                    meta.text = "${clip.day()} · ${GridAdapter.clock(video.duration / 1000)} · ${clip.size()}"
-                }
-                if (wantsPlay) start()
-            }
-            video.setOnErrorListener { _, _, _ ->
-                meta.text = "Cannot play this file"
-                true
-            }
-            video.setVideoURI(clip.uri)
-            pauseIcon.visibility = View.VISIBLE
         }
 
-        /**
-         * The page root is the view that actually owns the touch stream — VideoView declines it and
-         * ViewPager2 is only a wrapper around its own list — so both the double tap and the
-         * sideways tab swipe have to be read here, not on the pager.
-         *
-         * A CANCEL means the list has taken the gesture to move to the next video, so it is never a
-         * sideways swipe, and the drag must stay near flat to count as one at all.
-         */
+        /** The page reports touches; the activity decides. Never a click here, or a drag becomes a tap. */
         fun watch(listener: Listener) {
-            itemView.setOnTouchListener { _, event ->
+            itemView.setOnTouchListener { page, event ->
                 tapper.onTouchEvent(event)
-                when (event.actionMasked) {
-                    MotionEvent.ACTION_DOWN -> {
-                        downX = event.x; downY = event.y; strayed = 0f
-                    }
-                    MotionEvent.ACTION_MOVE ->
-                        strayed = max(strayed, abs(event.y - downY))
-                    MotionEvent.ACTION_UP -> {
-                        val dx = event.x - downX
-                        val edge = 130 * itemView.resources.displayMetrics.density
-                        if (abs(dx) > edge && strayed < 45 * itemView.resources.displayMetrics.density)
-                            listener.onSwipe(dx > 0)
-                    }
-                    else -> Unit
-                }
-                false
+                listener.onDrag(event, page)
             }
         }
 
@@ -167,7 +167,7 @@ class OfflineAdapter(
                 paint(clip)
             }
             val heart = TextView(itemView.context).apply {
-                text = "❤"
+                text = "\u2764"
                 textSize = 58f
                 setTextColor(context.getColor(R.color.accent))
                 translationX = x - 40f
@@ -209,7 +209,7 @@ class OfflineAdapter(
         fun start() {
             wantsPlay = true
             if (ready) {
-                video.start()
+                if (!video.isPlaying) video.start()
                 pauseIcon.visibility = View.GONE
             }
         }
@@ -233,13 +233,21 @@ class OfflineAdapter(
     override fun onCreateViewHolder(parent: ViewGroup, type: Int) =
         Holder(LayoutInflater.from(parent.context).inflate(R.layout.item_offline, parent, false))
 
+    override fun getItemId(position: Int): Long {
+        val clip = clips.getOrNull(position) ?: return RecyclerView.NO_ID
+        return clip.uri.toString().hashCode().toLong()
+    }
+
     override fun onBindViewHolder(holder: Holder, position: Int) {
-        clips.getOrNull(position)?.let { holder.bind(it, listener) }
+        val clip = clips.getOrNull(position) ?: return
+        holder.bind(clip, listener)
         holder.boundPosition = position
+        holders.entries.removeAll { it.value === holder && it.key != position }
         holders[position] = holder
         if (position == selected) holder.start()
         holder.itemView.setOnLongClickListener {
-            listener.onLongPress(holder.bindingAdapterPosition)
+            val at = holder.bindingAdapterPosition
+            if (at != RecyclerView.NO_POSITION) listener.onLongPress(at)
             true
         }
         holder.itemView.setOnClickListener { holder.onTap() }
@@ -248,26 +256,32 @@ class OfflineAdapter(
 
     override fun onViewRecycled(holder: Holder) {
         holder.pause()
-        if (holder.boundPosition >= 0) holders.remove(holder.boundPosition)
+        holder.boundPosition = -1
+        holders.entries.removeAll { it.value === holder }
     }
 
     override fun getItemCount() = clips.size
 
+    fun clipAt(position: Int) = clips.getOrNull(position)
+
     fun playAt(position: Int) {
         selected = position
-        holders.forEach { (pos, holder) -> if (pos == position) holder.start() else holder.pause() }
+        holders.entries.toList().forEach { (pos, holder) ->
+            if (pos == position) holder.start() else holder.pause()
+        }
     }
 
     /**
-     * A tab change that keeps the pager and its players: only the list underneath moves. Rebuilding
-     * the adapter instead is what made the swipe jerk and restart the video.
+     * A tab change that keeps the pager and its players: the list underneath moves, the page that
+     * holds the current clip stays bound to the same holder, so nothing is reloaded and nothing jumps.
      */
     fun swap(list: List<LocalVideo>, at: Int) {
+        // A reordered list that still holds the same clips in the same place is not a change at all:
+        // not notifying keeps every page, and therefore the player, exactly as it was.
+        val unchanged = list.size == clips.size && list.indices.all { list[it].uri == clips[it].uri }
         clips = list
         selected = at
-        pauseAll()
-        holders.clear()
-        notifyDataSetChanged()
+        if (!unchanged) notifyDataSetChanged()
     }
 
     fun pauseAll() = holders.values.toList().forEach { it.pause() }

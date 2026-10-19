@@ -13,9 +13,10 @@ import org.json.JSONObject
 import java.io.File
 
 /**
- * Where the videos live: one plain folder, Downloads/TikTokGrab/library, with names ending in .tgr and
- * a .nomedia beside them — no gallery shows them, no file manager presents them as a video, and they
- * are ours to play. Files that MediaStore owns for this package are deleted when the app is uninstalled,
+ * Where the videos live: one plain folder, Downloads/TikTokGrab/library, with names ending in
+ * .nomedia and a .nomedia marker beside them — no gallery shows them, no file manager presents them
+ * as a video, and no other player offers to open them, while they are still plain files that outlive
+ * an uninstall. Files that MediaStore owns for this package are deleted when the app is uninstalled,
  * which is exactly what took the library away before, so nothing here goes through MediaStore.
  *
  * Which profile a clip belongs to is a record, not a folder: one folder for all videos, as agreed.
@@ -24,7 +25,7 @@ object Vault {
 
     const val ROOT = "TikTokGrab"
     const val LIBRARY = "library"
-    const val EXT = ".tgr"
+    const val EXT = ".nomedia"
 
     private const val PREF = "saved"
     private const val KEY = "files"
@@ -76,8 +77,30 @@ object Vault {
     }
 
     fun list(context: Context): List<File> =
-        dir(context).listFiles()?.filter { it.isFile && it.name.endsWith(EXT) && it.length() > 0 }
-            ?: emptyList()
+        dir(context).listFiles()?.filter {
+            it.isFile && it.length() > 0 && it.name != ".nomedia" && it.name.endsWith(EXT)
+        } ?: emptyList()
+
+    /**
+     * Every clip ends in .nomedia: no gallery indexes it, and no other player offers to open it.
+     * Clips written by the older builds (.tgr, or an .mp4 that landed here before) are renamed in
+     * place — same bytes, same folder, no copy, no second file.
+     */
+    fun normalise(context: Context): Int {
+        if (!granted(context)) return 0
+        var renamed = 0
+        val folder = dir(context)
+        folder.listFiles()?.forEach { file ->
+            if (!file.isFile) return@forEach
+            val name = file.name
+            if (name == ".nomedia" || name.endsWith(EXT)) return@forEach
+            if (!name.endsWith(".tgr") && !name.endsWith(".mp4")) return@forEach
+            val target = File(folder, name.substringBeforeLast('.') + EXT)
+            if (target.exists()) return@forEach
+            if (runCatching { file.renameTo(target) }.getOrDefault(false)) renamed++
+        }
+        return renamed
+    }
 
     fun record(context: Context, clipId: String, author: String, caption: String) {
         if (clipId.isBlank()) return

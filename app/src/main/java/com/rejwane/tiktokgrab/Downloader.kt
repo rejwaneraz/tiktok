@@ -1,11 +1,9 @@
 package com.rejwane.tiktokgrab
 
-import android.content.ContentValues
 import android.content.Context
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
-import android.provider.MediaStore
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -111,7 +109,10 @@ object Downloader {
                 val (path, uri) = when {
                     Vault.granted(context) -> saveVault(context, clip, response, onBytes)
                     Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q ->
-                        saveScoped(context, folderFor(clip), name, response, onBytes)
+                        // MediaStore would put the file somewhere the system deletes with the app, and
+                        // in the gallery as a playable video. That is the shape that lost the library
+                        // once already, so it is refused out loud instead of used quietly.
+                        throw RuntimeException("All files access is off - turn it on in Settings")
                     else -> saveLegacy(context, folderFor(clip), name, response, onBytes)
                 }
                 // The profile is a record now, not a folder — written even for the old paths, so a
@@ -134,26 +135,6 @@ object Downloader {
             throw e
         }
         return Pair(file.absolutePath, Uri.fromFile(file).toString())
-    }
-
-    private suspend fun saveScoped(context: Context, folder: String, name: String, response: Response,
-                                   onBytes: (Long) -> Unit): Pair<String, String> {
-        val values = ContentValues().apply {
-            put(MediaStore.Downloads.DISPLAY_NAME, name)
-            put(MediaStore.Downloads.MIME_TYPE, "video/mp4")
-            put(MediaStore.Downloads.RELATIVE_PATH, "${Environment.DIRECTORY_DOWNLOADS}/$FOLDER/$folder")
-        }
-        val uri = context.contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
-            ?: throw RuntimeException("could not create file")
-        try {
-            context.contentResolver.openOutputStream(uri)?.use { stream(response, it, onBytes) }
-                ?: throw RuntimeException("could not write file")
-        } catch (e: Exception) {
-            // A half row in the gallery is worse than no row: drop it so the retry starts clean.
-            runCatching { context.contentResolver.delete(uri, null, null) }
-            throw e
-        }
-        return Pair("Downloads/$FOLDER/$folder/$name", uri.toString())
     }
 
     private suspend fun saveLegacy(context: Context, folder: String, name: String, response: Response,

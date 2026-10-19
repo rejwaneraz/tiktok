@@ -12,7 +12,9 @@ data class Comment(
     val seconds: Long,
     val likes: Long,
     val photo: String = "",
-    val replies: Int = 0
+    val replies: Int = 0,
+    /** Where the picture lives at the reader — fetched only when the comment is tapped. */
+    val photoUrl: String = ""
 ) {
     fun ago(): String = GridAdapter.ago(seconds)
 }
@@ -48,8 +50,16 @@ object Comments {
         val array = runCatching { JSONArray(raw) }.getOrDefault(JSONArray())
         return (0 until array.length()).mapNotNull { i ->
             val o = array.optJSONObject(i) ?: return@mapNotNull null
-            Comment(o.optString("id"), o.optString("name"), o.optString("text"),
-                o.optLong("t"), o.optLong("l"), o.optString("p"), o.optInt("r"))
+            Comment(
+                id = o.optString("id"),
+                name = o.optString("name"),
+                text = o.optString("text"),
+                seconds = o.optLong("t"),
+                likes = o.optLong("l"),
+                photo = o.optString("p"),
+                replies = o.optInt("r"),
+                photoUrl = o.optString("u")
+            )
         }
     }
 
@@ -72,15 +82,25 @@ object Comments {
         var kept = load(context, clipId)
         var cursor = 0L
         var pages = 0
+        var retries = 0
         var answered = false
         while (kept.size < LIMIT && pages < 8) {
             pages++
             pace()
             val body = runCatching { JSONObject(Http.openGet(page(clipId, cursor))) }.getOrNull()
                 ?: break
-            // "code 0" is the reader saying "here is the clip". Anything else is its "not for you"
-            // (rate limit, unknown clip, blocked) and must never be read as an empty clip.
-            if (body.optInt("code", 0) != 0) break
+            val code = body.optInt("code", 0)
+            // "code 0" is the reader saying "here is the clip". A one-per-second refusal is pacing,
+            // not a dead clip: it is waited out and asked again instead of reported as a failure.
+            if (code != 0) {
+                if (retries < 2 && body.optString("msg").contains("limit", ignoreCase = true)) {
+                    retries++
+                    pages--
+                    runCatching { Thread.sleep(1400) }
+                    continue
+                }
+                break
+            }
             answered = true
             val data = body.optJSONObject("data") ?: break
             val batch = data.optJSONArray("comments") ?: JSONArray()
@@ -116,16 +136,26 @@ object Comments {
             text = text,
             seconds = item.optLong("create_time"),
             likes = item.optLong("digg_count"),
-            photo = photoOf(context, clipId, id, item),
-            replies = item.optInt("reply_total")
+            photo = savedPhoto(context, clipId, id),
+            replies = item.optInt("reply_total"),
+            photoUrl = firstUrl(item.opt("images")).orEmpty()
         )
     }
 
     /** Only pictures that a comment actually carries cost data — everything else stays generic. */
-    private fun photoOf(context: Context, clipId: String, id: String, item: JSONObject): String {
-        val url = firstUrl(item.opt("images")) ?: return ""
+    private fun savedPhoto(context: Context, clipId: String, id: String): String {
         val name = "${clipId}_$id.jpg"
-        return if (Store.download(context, PHOTOS, name, url)) name else ""
+        return if (Store.exists(context, PHOTOS, name)) name else ""
+    }
+
+    /**
+     * A picture is pulled when the comment is tapped, never during a batch: photos are the part that
+     * would quietly turn a 40 KB file into megabytes.
+     */
+    fun downloadPhoto(context: Context, clipId: String, comment: Comment): Boolean {
+        if (comment.photoUrl.isBlank()) return false
+        val name = "${clipId}_${comment.id}.jpg"
+        return Store.download(context, PHOTOS, name, comment.photoUrl)
     }
 
     private fun firstUrl(value: Any?): String? = when (value) {
@@ -153,7 +183,7 @@ object Comments {
             array.put(JSONObject()
                 .put("id", comment.id).put("name", comment.name).put("text", comment.text)
                 .put("t", comment.seconds).put("l", comment.likes)
-                .put("p", comment.photo).put("r", comment.replies))
+                .put("p", comment.photo).put("r", comment.replies).put("u", comment.photoUrl))
         }
         Store.writeText(context, FOLDER, "$clipId.json", array.toString())
     }

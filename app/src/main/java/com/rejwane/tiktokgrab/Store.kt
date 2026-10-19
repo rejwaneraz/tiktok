@@ -23,7 +23,24 @@ object Store {
     private fun legacyDir(context: Context, folder: String) =
         File(context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), "$ROOT/$DIR/$folder")
 
+    /**
+     * With All files access we own the folder, so records are plain files. MediaStore rows belong to
+     * this package and the system deletes them with the app — the exact reason a reinstall used to
+     * come back with nothing, comments and avatars included.
+     */
+    private fun plainDir(context: Context, folder: String) = File(
+        File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "$ROOT/$DIR"),
+        folder
+    )
+
+    private fun plainFile(context: Context, folder: String, name: String) =
+        File(plainDir(context, folder), name)
+
     fun find(context: Context, folder: String, name: String): Uri? {
+        if (Vault.granted(context)) {
+            val plain = plainFile(context, folder, name)
+            if (plain.isFile && plain.length() > 0) return Uri.fromFile(plain)
+        }
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return legacyFile(context, folder, name)?.let(Uri::fromFile)
         val id = runCatching {
             context.contentResolver.query(
@@ -38,6 +55,13 @@ object Store {
     fun exists(context: Context, folder: String, name: String) = find(context, folder, name) != null
 
     fun write(context: Context, folder: String, name: String, mime: String, bytes: ByteArray): Boolean {
+        if (Vault.granted(context)) {
+            return runCatching {
+                val dir = plainDir(context, folder).apply { mkdirs() }
+                File(dir, name).writeBytes(bytes)
+                true
+            }.getOrDefault(false)
+        }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             val known = find(context, folder, name)
             if (known != null && known.scheme != "file") {
@@ -95,12 +119,18 @@ object Store {
 
     fun clear(context: Context, folder: String) {
         urisIn(context, folder).forEach { uri ->
-            runCatching { context.contentResolver.delete(uri, null, null) }
+            if (uri.scheme == "file") runCatching { File(uri.path ?: return@runCatching).delete() }
+            else runCatching { context.contentResolver.delete(uri, null, null) }
         }
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) legacyDir(context, folder).deleteRecursively()
     }
 
     private fun urisIn(context: Context, folder: String): List<Uri> {
+        if (Vault.granted(context)) {
+            return plainDir(context, folder).listFiles()
+                ?.filter { it.isFile && it.length() > 0 }
+                ?.map { Uri.fromFile(it) } ?: emptyList()
+        }
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
             return legacyDir(context, folder).listFiles()?.filter { it.length() > 0 }
                 ?.map { Uri.fromFile(it) } ?: emptyList()

@@ -25,7 +25,7 @@ import java.util.concurrent.Executors
 
 /**
  * One downloaded video on this phone. New ones are plain files in Download/TikTokGrab/library named
- * "<caption> [clipId].tgr", so the caption and the clip id come off the name and the profile comes
+ * "<caption> [clipId].nomedia", so the caption and the clip id come off the name and the profile comes
  * from our own record — no API, no network, no login.
  */
 data class LocalVideo(
@@ -65,6 +65,9 @@ object LocalVideos {
         name.filterNot { ILLEGAL.contains(it) }.trim().trim('.').ifBlank { UNASSIGNED }
 
     fun scan(context: Context): List<LocalVideo> {
+        // Older builds wrote .tgr (and, even earlier, .mp4) into the same folder: rename them once so
+        // every clip carries the same discreet extension.
+        runCatching { Vault.normalise(context) }
         val found = runCatching {
             (vault(context) + scoped(context) + legacy(context)).sortedByDescending { it.addedAt }
         }.getOrNull() ?: return emptyList()

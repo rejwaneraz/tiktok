@@ -8,6 +8,7 @@ import android.os.Handler
 import android.os.Looper
 import android.text.Editable
 import android.text.TextWatcher
+import android.view.MotionEvent
 import android.view.View
 import android.widget.EditText
 import android.widget.ImageView
@@ -23,6 +24,7 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlin.math.abs
 
 /**
  * The offline half of the app, shaped like TikTok: a For You shuffle, an Explore search, and one
@@ -41,6 +43,15 @@ class OfflineActivity : AppCompatActivity(), OfflineAdapter.Listener {
     private var tab = VIDEOS
     private var order = NEWEST
     private var scope = ALL
+
+    // One gesture state machine for the whole feed; see onDrag.
+    private var dragMode = DRAG_NONE
+    private var dragFromX = 0f
+    private var dragFromY = 0f
+    private var dragWidth = 1f
+
+    /** True while a list swap is re-seating the pager, so its own callbacks cannot fight us. */
+    private var swapping = false
 
     private val tick = Handler(Looper.getMainLooper())
 
@@ -65,6 +76,9 @@ class OfflineActivity : AppCompatActivity(), OfflineAdapter.Listener {
 
     private val callback = object : ViewPager2.OnPageChangeCallback() {
         override fun onPageSelected(selected: Int) {
+            // A list swap can make the pager report page 0 before we have re-seated it; taking that
+            // seriously would jump the feed back to the first video after every tab change.
+            if (swapping && selected != adapter?.selected) return
             position = selected
             counter.text = "${selected + 1} / ${feed.size}"
             adapter?.playAt(selected)
@@ -95,6 +109,8 @@ class OfflineActivity : AppCompatActivity(), OfflineAdapter.Listener {
         }
         findViewById<TextView>(R.id.profileHi).setOnClickListener { openUrl(tiktokProfile()) }
         findViewById<TextView>(R.id.profileMore).setOnClickListener { overflow() }
+        // A sideways drag over a profile walks back into the feed, the same way the feed walks tabs.
+        findViewById<View>(R.id.profileScroll).setOnTouchListener { page, event -> onDrag(event, page) }
         findViewById<View>(R.id.tabVideos).setOnClickListener { pickTab(VIDEOS) }
         findViewById<View>(R.id.tabShuffle).setOnClickListener { pickTab(SHUFFLE) }
         findViewById<View>(R.id.tabLiked).setOnClickListener { pickTab(LIKED) }
@@ -120,12 +136,14 @@ class OfflineActivity : AppCompatActivity(), OfflineAdapter.Listener {
     private fun feedSource() =
         if (feedTab == FOLLOWING) videos.filter { Follows.isFollowing(this, it.author) } else videos
 
-    private fun showFeed() = show(LocalVideos.forYou(this, feedSource()), 0)
+    private fun showFeed() {
+        if (section == FEED) return
+        val next = pinned(LocalVideos.forYou(this, feedSource()))
+        backToFeed(next.first, next.second)
+    }
 
-    /** TikTok's own sideways order: Following, For You, then the profile that is open. */
-    private fun slots(): List<Int> =
-        if (opened != null) listOf(SLOT_FOLLOWING, SLOT_FORYOU, SLOT_PROFILE)
-        else listOf(SLOT_FOLLOWING, SLOT_FORYOU)
+    /** TikTok's own sideways order: Following, For You, then the profile of what is playing. */
+    private fun slots() = listOf(SLOT_FOLLOWING, SLOT_FORYOU, SLOT_PROFILE)
 
     private fun slotNow() = when {
         section == PROFILE -> SLOT_PROFILE
@@ -133,13 +151,101 @@ class OfflineActivity : AppCompatActivity(), OfflineAdapter.Listener {
         else -> SLOT_FORYOU
     }
 
-    /** A sideways drag walks those few screens, and only the list underneath ever moves. */
-    override fun onSwipe(toFollowing: Boolean) {
+    /**
+     * One state machine for every touch on the feed, and no decision is left to the page.
+     *
+     * The vertical pager used to take a sideways drag away with an ACTION_CANCEL as soon as the
+     * finger drifted a few dp downwards, which is why the swipe answered only sometimes. Now the
+     * page holds the gesture on DOWN, decides on the first real movement, and hands it back the
+     * moment the drag is vertical — so a page turn and a screen swipe never fight.
+     */
+    override fun onDrag(event: MotionEvent, page: View): Boolean {
+        val slop = 9f * resources.displayMetrics.density
+        // A profile slides like a screen; the feed slides the pager underneath it.
+        val moving: View = if (section == PROFILE) profileRoot else pager
+        when (event.actionMasked) {
+            MotionEvent.ACTION_DOWN -> {
+                dragMode = DRAG_UNDECIDED
+                dragFromX = event.x
+                dragFromY = event.y
+                dragWidth = page.width.toFloat().coerceAtLeast(1f)
+                if (moving === pager) page.parent?.requestDisallowInterceptTouchEvent(true)
+            }
+            MotionEvent.ACTION_MOVE -> {
+                val dx = event.x - dragFromX
+                val dy = event.y - dragFromY
+                if (dragMode == DRAG_UNDECIDED) {
+                    if (abs(dy) > slop && abs(dy) > abs(dx) && moving === pager) {
+                        dragMode = DRAG_VERTICAL
+                        page.parent?.requestDisallowInterceptTouchEvent(false)
+                    } else if (abs(dx) > slop && abs(dx) > abs(dy) * 1.15f) {
+                        dragMode = DRAG_HORIZONTAL
+                        moving.animate().cancel()
+                    }
+                }
+                if (dragMode == DRAG_HORIZONTAL) {
+                    moving.translationX = dx
+                    moving.alpha = 1f - (abs(dx) / dragWidth) * 0.22f
+                }
+            }
+            MotionEvent.ACTION_UP -> {
+                if (dragMode == DRAG_HORIZONTAL) {
+                    val dx = event.x - dragFromX
+                    if (abs(dx) > dragWidth * 0.25f) finishDrag(dx < 0) else settleDrag()
+                }
+                dragMode = DRAG_NONE
+            }
+            MotionEvent.ACTION_CANCEL -> {
+                if (dragMode == DRAG_HORIZONTAL) settleDrag()
+                dragMode = DRAG_NONE
+            }
+        }
+        return dragMode == DRAG_HORIZONTAL
+    }
+
+    private fun finishDrag(forward: Boolean) {
+        if (section == PROFILE) {
+            val target = nextSlot(forward)
+            val outOf = if (forward) -dragWidth else dragWidth
+            profileRoot.animate().translationX(outOf).alpha(0.6f).setDuration(130L).withEndAction {
+                profileRoot.translationX = 0f
+                profileRoot.alpha = 1f
+                backToFeed()
+                applySlot(target)
+            }.start()
+            return
+        }
+        val out = if (forward) -dragWidth else dragWidth
+        pager.animate().translationX(out).alpha(0.65f).setDuration(130L).withEndAction {
+            pager.translationX = -out
+            pager.alpha = 0.65f
+            stepSlot(forward)
+            pager.animate().translationX(0f).alpha(1f).setDuration(170L).start()
+        }.start()
+    }
+
+    private fun settleDrag() {
+        val moving: View = if (section == PROFILE) profileRoot else pager
+        moving.animate().translationX(0f).alpha(1f).setDuration(150L).start()
+    }
+
+    private fun stepSlot(forward: Boolean) = applySlot(nextSlot(forward))
+
+    private fun nextSlot(forward: Boolean): Int {
         val order = slots()
         val at = order.indexOf(slotNow()).coerceAtLeast(0)
-        val step = if (toFollowing) order.size - 1 else 1
-        when (order[(at + step) % order.size]) {
-            SLOT_PROFILE -> opened?.let { showProfile(it) }
+        val step = if (forward) 1 else order.size - 1
+        return order[(at + step) % order.size]
+    }
+
+    private fun applySlot(slot: Int) {
+        when (slot) {
+            SLOT_PROFILE -> {
+                // Stepping in, the profile is whoever made the clip that is playing — never whoever
+                // was opened last time.
+                val author = feed.getOrNull(position)?.author ?: opened
+                if (author != null) showProfile(author) else switchTab(FOR_YOU)
+            }
             SLOT_FOLLOWING -> switchTab(FOLLOWING)
             else -> switchTab(FOR_YOU)
         }
@@ -148,13 +254,31 @@ class OfflineActivity : AppCompatActivity(), OfflineAdapter.Listener {
     /** The top tabs and a sideways drag both land here, and neither may throw you back to video one. */
     private fun switchTab(which: Int) {
         if (which == feedTab && section == FEED) return
-        val where = feed.getOrNull(position)
         feedTab = which
-        val list = LocalVideos.forYou(this, feedSource())
-        val index = where?.let { clip -> list.indexOfFirst { it.uri == clip.uri } } ?: -1
-        val at = if (index >= 0) index else 0
-        // Coming back from a profile is a section change; between tabs it must not rebuild anything.
-        if (section != FEED) show(list, at) else swapTo(list, at)
+        val next = pinned(LocalVideos.forYou(this, feedSource()))
+        if (section != FEED) backToFeed(next.first, next.second) else swapTo(next.first, next.second)
+    }
+
+    /**
+     * The clip that is playing keeps its page index in the new list, so the pager does not move at
+     * all and the page that already holds it is never rebound. Only a clip that left the list (an
+     * unfollowed author) starts again from the top.
+     */
+    private fun pinned(list: List<LocalVideo>): Pair<List<LocalVideo>, Int> {
+        if (list.isEmpty()) return list to 0
+        val clip = feed.getOrNull(position)
+        val at = clip?.let { playing -> list.indexOfFirst { it.uri == playing.uri } } ?: -1
+        if (at < 0) return list to 0
+        val target = position.coerceIn(0, list.size - 1)
+        val n = list.size
+        if (at == target) return list to target
+        // Ring from the current clip outwards, then rotate it back so that clip lands on `target`.
+        val ring = ArrayList<LocalVideo>(n)
+        ring.addAll(list.subList(at, n))
+        ring.addAll(list.subList(0, at))
+        val rotated = ArrayList<LocalVideo>(n)
+        for (i in 0 until n) rotated.add(ring[(i - target + n) % n])
+        return rotated to target
     }
 
     /** Changes what the feed holds without dropping the pager, so the video keeps playing. */
@@ -162,14 +286,27 @@ class OfflineActivity : AppCompatActivity(), OfflineAdapter.Listener {
         val held = adapter ?: return show(list, index)
         feed = list
         position = if (list.isEmpty()) 0 else index.coerceIn(0, list.size - 1)
+        swapping = true
         held.swap(list, position)
-        if (pager.currentItem != position) pager.setCurrentItem(position, false)
         counter.text = if (list.isEmpty()) "" else "${position + 1} / ${list.size}"
         empty.setText(if (feedTab == FOLLOWING && Follows.all(this).isEmpty())
             R.string.follow_someone else R.string.offline_empty)
         empty.visibility = if (list.isEmpty()) View.VISIBLE else View.GONE
         paintFeedTabs()
-        pager.post { held.playAt(position) }
+        // Seat the pager after the adapter has taken the new list, then make sure the clip that was
+        // playing is the one holding the screen.
+        pager.post {
+            if (list.isNotEmpty() && pager.currentItem != position) pager.setCurrentItem(position, false)
+            swapping = false
+            held.playAt(position)
+        }
+    }
+
+    /** Coming back from Explore, Me or a profile keeps the feed, its page and its player as they were. */
+    private fun backToFeed(list: List<LocalVideo> = feed, at: Int = position) {
+        section = FEED
+        draw()
+        swapTo(list, at)
     }
 
     private fun paintFeedTabs() {
@@ -187,6 +324,9 @@ class OfflineActivity : AppCompatActivity(), OfflineAdapter.Listener {
     private fun show(list: List<LocalVideo>, start: Int) {
         section = FEED
         feed = list
+        swapping = false
+        pager.translationX = 0f
+        pager.alpha = 1f
         position = if (list.isEmpty()) 0 else start.coerceIn(0, list.size - 1)
         adapter = OfflineAdapter(feed, this).also {
             it.selected = position
@@ -343,6 +483,8 @@ class OfflineActivity : AppCompatActivity(), OfflineAdapter.Listener {
         paintTabs()
         fillGrid()
         draw()
+        profileRoot.alpha = 0f
+        profileRoot.animate().alpha(1f).setDuration(140L).start()
     }
 
     private fun number(value: Long) = if (value > 0) GridAdapter.short(value) else "\u2013"
@@ -453,7 +595,9 @@ class OfflineActivity : AppCompatActivity(), OfflineAdapter.Listener {
     }
 
     private fun draw() {
-        feedRoot.visibility = if (section == FEED) View.VISIBLE else View.GONE
+        // The feed stays behind every other screen: hiding it was what stopped the video and made
+        // coming back feel like a restart. Explore, Me and a profile are opaque, so nothing leaks.
+        feedRoot.visibility = View.VISIBLE
         exploreRoot.visibility = if (section == EXPLORE) View.VISIBLE else View.GONE
         authorList.visibility = if (section == AUTHORS) View.VISIBLE else View.GONE
         profileRoot.visibility = if (section == PROFILE) View.VISIBLE else View.GONE
@@ -515,6 +659,17 @@ class OfflineActivity : AppCompatActivity(), OfflineAdapter.Listener {
         super.onPause()
     }
 
+    /** Back goes to the feed first, which keeps the clip playing instead of closing the app. */
+    @Deprecated("The system back button is the third way out of a profile")
+    override fun onBackPressed() {
+        if (section != FEED) {
+            backToFeed()
+            return
+        }
+        @Suppress("DEPRECATION")
+        super.onBackPressed()
+    }
+
     override fun onDestroy() {
         adapter = null
         super.onDestroy()
@@ -525,6 +680,12 @@ class OfflineActivity : AppCompatActivity(), OfflineAdapter.Listener {
         const val EXPLORE = 1
         const val AUTHORS = 2
         const val PROFILE = 3
+
+        // One gesture state machine: undecided until the first real movement.
+        const val DRAG_NONE = 0
+        const val DRAG_UNDECIDED = 1
+        const val DRAG_VERTICAL = 2
+        const val DRAG_HORIZONTAL = 3
 
         // The three screens a sideways drag walks between, kept apart from the section numbers above.
         const val SLOT_FOLLOWING = 10
