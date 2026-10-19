@@ -48,9 +48,12 @@ object Http {
     fun finalUrl(url: String): String =
         client.newCall(request(url)).execute().use { response -> response.request.url.toString() }
 
-    /** Pulls one small binary — an author's avatar — straight onto disk. */
+    /** Pulls one small binary — an author's avatar or a comment's picture — straight onto disk. */
     fun save(url: String, dest: java.io.File): Boolean {
-        val call = Request.Builder().url(url).header("User-Agent", UA).build()
+        val call = Request.Builder().url(url)
+            .header("User-Agent", UA)
+            .header("Referer", "https://www.tiktok.com/")
+            .build()
         client.newCall(call).execute().use { response ->
             if (!response.isSuccessful) return false
             val body = response.body ?: return false

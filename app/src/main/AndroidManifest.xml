@@ -10,6 +10,11 @@
     <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE"
         tools:ignore="ScopedStorage" />
 
+    <!-- A batch download carries a progress notification, so leaving the app is not a stop. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
     <application
         android:name=".App"
         android:allowBackup="true"
@@ -51,6 +56,11 @@
             android:exported="false"
             android:screenOrientation="portrait"
             android:theme="@style/Theme.TikTokGrab.Fullscreen" />
+
+        <service
+            android:name=".DownloadService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
 
         <!-- A file:// address handed to another app is refused since Android 7, so sharing goes
              through this small door that only covers our own folder. -->

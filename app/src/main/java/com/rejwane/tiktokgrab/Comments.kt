@@ -143,9 +143,12 @@ object Comments {
         )
     }
 
-    /** Every picture a comment carries, in order; the file name is index-based so the order holds. */
+    /**
+     * Every picture a comment carries, in order. The first keeps the name the older build used, so
+     * pictures saved before this change are still found instead of showing as empty boxes.
+     */
     private fun photoName(clipId: String, commentId: String, index: Int) =
-        "${clipId}_${commentId}_$index.jpg"
+        if (index == 0) "${clipId}_${commentId}.jpg" else "${clipId}_${commentId}_$index.jpg"
 
     private fun savedPhotos(context: Context, clipId: String, id: String, count: Int): List<String> =
         (0 until count).mapNotNull { i ->
@@ -165,6 +168,10 @@ object Comments {
         }
         return got
     }
+
+    /** Comments that say they carry pictures we have not put on disk yet. */
+    fun pendingPictures(comments: List<Comment>): List<Comment> =
+        comments.filter { it.photoUrls.isNotEmpty() && it.photos.size < it.photoUrls.size }
 
     /** Accepts a bare string, an array of strings, or an array of objects that carry one. */
     private fun allUrls(value: Any?): List<String> = when (value) {

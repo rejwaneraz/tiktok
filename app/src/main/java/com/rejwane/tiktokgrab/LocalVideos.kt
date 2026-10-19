@@ -96,12 +96,13 @@ object LocalVideos {
     }
 
     /**
-     * For You order is rolled once and then kept, so swiping back never throws you somewhere else.
-     * New videos land wherever their roll falls, deleted ones simply drop out.
+     * For You order. With `fresh` the roll happens again — TikTok gives a new feed every time it
+     * opens — and without it the same order is kept, so a tab change never moves the video that is
+     * playing. New videos land wherever their roll falls, deleted ones simply drop out.
      */
-    fun forYou(context: Context, videos: List<LocalVideo>): List<LocalVideo> {
+    fun forYou(context: Context, videos: List<LocalVideo>, fresh: Boolean = false): List<LocalVideo> {
         val prefs = context.getSharedPreferences("foryou", Context.MODE_PRIVATE)
-        val saved = runCatching { JSONObject(prefs.getString("order", "{}")) }
+        val saved = if (fresh) JSONObject() else runCatching { JSONObject(prefs.getString("order", "{}")) }
             .getOrDefault(JSONObject())
         val dice = HashMap<String, Double>()
         var fresh = false

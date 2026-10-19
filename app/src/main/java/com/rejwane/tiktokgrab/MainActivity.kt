@@ -42,6 +42,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var refresh: SwipeRefreshLayout
     private lateinit var grid: RecyclerView
     private lateinit var libraryList: RecyclerView
+    private lateinit var libraryPane: View
+
     private lateinit var settingsList: RecyclerView
 
     private var tikWeb: TikTokWeb? = null
@@ -77,6 +79,8 @@ class MainActivity : AppCompatActivity() {
         refresh = findViewById(R.id.refresh)
         grid = findViewById(R.id.grid)
         libraryList = findViewById(R.id.library)
+        libraryPane = findViewById(R.id.libraryPane)
+        findViewById<TextView>(R.id.librarySort).setOnClickListener { pickLibraryOrder() }
         settingsList = findViewById(R.id.settings)
 
         adapter = GridAdapter(onOpen = { openPlayer(it) }, onSelectionChanged = { showSelection() })
@@ -191,7 +195,7 @@ class MainActivity : AppCompatActivity() {
     private fun showSection(which: Int) {
         section = which
         grid.visibility = if (which == LIST) View.VISIBLE else View.GONE
-        libraryList.visibility = if (which == LIBRARY) View.VISIBLE else View.GONE
+        libraryPane.visibility = if (which == LIBRARY) View.VISIBLE else View.GONE
         settingsList.visibility = if (which == SETTINGS) View.VISIBLE else View.GONE
         refresh.isEnabled = which == LIST
         markTabs(which)
@@ -440,14 +444,40 @@ class MainActivity : AppCompatActivity() {
 
     /** The folder is the truth: whatever sits in Download/TikTokGrab is what this tab shows. */
     private fun refreshLibrary() {
-        val saved = LocalVideos.scan(this)
+        val saved = sortedForLibrary(LocalVideos.scan(this))
         val profiles = saved.map { it.author }.distinct()
         libraryList.adapter = LocalGridAdapter(saved, onOpen = { openOffline(it) }, onMenu = { clip ->
             LocalMenu.show(this, clip, profiles,
                 onDeleted = { refreshLibrary() }, onMoved = { refreshLibrary() })
         })
+        findViewById<TextView>(R.id.librarySort).text =
+            "${libraryOrders[libraryOrder().coerceIn(0, libraryOrders.size - 1)]} ▾"
         statusView.text = if (saved.isEmpty()) getString(R.string.library_empty)
         else "${saved.size} saved · ${GridAdapter.mb(saved.sumOf { it.bytes })}"
+    }
+
+    private val libraryOrders = arrayOf("Newest first", "Largest first", "Most played", "Random")
+
+    private fun libraryOrder() =
+        getSharedPreferences("ui", MODE_PRIVATE).getInt("library_order", 0)
+
+    /** Largest first answers "what do I delete", most played answers "what do I keep". */
+    private fun sortedForLibrary(list: List<LocalVideo>): List<LocalVideo> = when (libraryOrder()) {
+        1 -> list.sortedByDescending { it.bytes }
+        2 -> list.sortedByDescending { ClipStats.of(this, it.clipId).plays }
+        3 -> list.shuffled()
+        else -> list.sortedByDescending { it.addedAt }
+    }
+
+    private fun pickLibraryOrder() {
+        MaterialAlertDialogBuilder(this)
+            .setTitle("Library order")
+            .setSingleChoiceItems(libraryOrders, libraryOrder()) { dialog, which ->
+                getSharedPreferences("ui", MODE_PRIVATE).edit().putInt("library_order", which).apply()
+                dialog.dismiss()
+                refreshLibrary()
+            }
+            .show()
     }
 
     private fun openOffline(video: LocalVideo) {
@@ -544,6 +574,8 @@ class MainActivity : AppCompatActivity() {
         failed.clear()
         loadBtn.isEnabled = false
         lastPercent = -1
+        // Pins the process and shows the bar outside the app; it can never break the loop itself.
+        DownloadService.start(this, clips.size)
 
         task = lifecycleScope.launch {
             showSelection()
@@ -558,6 +590,7 @@ class MainActivity : AppCompatActivity() {
                                 runOnUiThread {
                                     progress.progress = whole
                                     statusView.text = "${finished + 1}/${clips.size} · $whole%"
+                                    DownloadService.progress(this@MainActivity, finished, clips.size)
                                 }
                             }
                         }
@@ -580,6 +613,7 @@ class MainActivity : AppCompatActivity() {
                 statusView.text = "Stopped · $finished/${clips.size} done"
                 throw e
             } finally {
+                DownloadService.stop(this@MainActivity)
                 loadBtn.isEnabled = true
                 showSelection()
                 if (section == LIBRARY) refreshLibrary()

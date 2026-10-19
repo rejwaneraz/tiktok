@@ -42,6 +42,7 @@ object Store {
      * nothing else changes.
      */
     private fun onDisk(name: String): String = when {
+        name.endsWith(".nomedia") -> name
         name.endsWith(".jpg", true) || name.endsWith(".png", true) -> "$name.nomedia"
         else -> name
     }

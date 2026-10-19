@@ -130,7 +130,8 @@ class OfflineActivity : AppCompatActivity(), OfflineAdapter.Listener {
         videos = LocalVideos.scan(this)
         val startUri = OfflineQueue.startUri
         OfflineQueue.startUri = null
-        val list = LocalVideos.forYou(this, videos)
+        // A fresh roll every time the feed opens, the way TikTok does it; tab switches reuse it.
+        val list = LocalVideos.forYou(this, videos, fresh = true)
         show(list, list.indexOfFirst { it.uri == startUri })
         fetchAvatars()
     }

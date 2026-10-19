@@ -92,6 +92,29 @@ The page used to carry a click listener as well as a gesture detector, so the fi
 tap fired play/pause before the heart. The click is gone; a single tap is confirmed only when the
 second one never arrives.
 
+### 2026-10-20 — replies cannot be read, and the app says so
+The reader has no reply endpoint: `comment/list/reply/` answers **404** for four different parameter
+shapes, and TikTok's own comment API is signature-gated (verified dead earlier). So a comment shows
+"3 replies" as plain grey text, without the word "View" and without a tap target — a count, not a door
+that does nothing.
+
+### 2026-10-20 — comment pictures load when the sheet opens
+Downloading them only on tap looked like missing pictures, and the file names changed shape (index 0
+keeps the old name so pictures saved by the previous build are found again). The sheet now fetches the
+pictures it does not have, one comment at a time, and repaints each row as it lands. A batch fetch of
+100 comments still downloads none.
+
+### 2026-10-20 — For You rolls again on every open
+The order used to be rolled once and kept forever. TikTok hands a new feed each time, so the feed
+rolls on open and keeps that order while the app is open — a tab switch still never moves the clip
+that is playing.
+
+### 2026-10-20 — the library has an order, and a download has a notification
+The library sorts by newest, largest, most played or random, chosen from a chip above the grid and
+remembered. A batch download runs with a foreground service and a progress notification, so leaving
+the app does not look like stopping; the service owns no work and every call into it is wrapped, so
+it can never break the loop.
+
 ## Measured, from a real request (2026-10-20)
 
 `https://www.tikwm.com/api/?url=<video>&hd=1` → 200, 7.2 KB, 2.1 s: `duration`, `size`, `hd_size`,

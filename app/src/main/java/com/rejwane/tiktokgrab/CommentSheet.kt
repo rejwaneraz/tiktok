@@ -58,6 +58,20 @@ object CommentSheet {
             }
             rows = adapter
             list.adapter = adapter
+            // A picture is part of reading the comment, so it comes down when the sheet opens —
+            // missing ones only, once, and never during a batch fetch.
+            val pending = Comments.pendingPictures(comments)
+            if (pending.isNotEmpty()) {
+                host.lifecycleScope.launch {
+                    withContext(Dispatchers.IO) {
+                        pending.forEach { comment ->
+                            if (Comments.downloadPhotos(host, video.clipId, comment)) {
+                                withContext(Dispatchers.Main) { rows?.photoReady(comment.id) }
+                            }
+                        }
+                    }
+                }
+            }
         }
 
         val saved = Comments.load(host, video.clipId)
@@ -153,7 +167,9 @@ class CommentAdapter(
         holder.text.text = comment.text
         holder.time.text = comment.ago()
         holder.avatar.setImageResource(Names.drawable(Names.guess(comment.name)))
-        holder.replies.text = "View ${comment.replies} replies"
+        // The reader has no reply endpoint (it answers 404), so this is a count, not a door: it is
+        // written without "View" and is not clickable, because nothing would happen.
+        holder.replies.text = "${comment.replies} replies"
         holder.replies.visibility = if (comment.replies > 0) View.VISIBLE else View.GONE
         holder.likes.text = if (comment.likes > 0) GridAdapter.short(comment.likes) else ""
 
