@@ -480,15 +480,29 @@ class OfflineActivity : AppCompatActivity(), OfflineAdapter.Listener {
      * The library tags itself: every clip is matched against the word table in Tags, and a tag only
      * becomes a chip when at least two clips carry it — one clip is not a category.
      */
+    /**
+     * Hand-made tags first, then the guessed ones — a person's label beats a caption's word.
+     */
+    private fun labelsOf(video: LocalVideo): List<String> {
+        val key = ClipTags.key(video.clipId, video.name)
+        val mine = ClipTags.of(this, key)
+        val guessed = Tags.of(video, ClipStats.of(this, video.clipId))
+        return mine + guessed.filterNot { it in mine }
+    }
+
     private fun tagCounts(): List<Pair<String, Int>> {
         val counts = HashMap<String, Int>()
+        val handMade = HashSet<String>()
         videos.forEach { video ->
-            Tags.of(video, ClipStats.of(this, video.clipId)).forEach { label ->
+            // A tag the user typed is deliberate, so it may appear with a single clip; a guessed one
+            // needs at least two before it deserves to be called a category.
+            handMade.addAll(ClipTags.of(this, ClipTags.key(video.clipId, video.name)))
+            labelsOf(video).forEach { label ->
                 counts[label] = (counts[label] ?: 0) + 1
             }
         }
         return counts.entries
-            .filter { it.value >= 2 }
+            .filter { it.value >= 2 || it.key in handMade }
             .sortedByDescending { it.value }
             .take(8)
             .map { it.key to it.value }
@@ -535,9 +549,7 @@ class OfflineActivity : AppCompatActivity(), OfflineAdapter.Listener {
             FOLLOWED -> videos.filter { Follows.isFollowing(this, it.author) }
             else -> videos
         }
-        if (tag.isNotBlank()) list = list.filter { video ->
-            Tags.of(video, ClipStats.of(this, video.clipId)).contains(tag)
-        }
+        if (tag.isNotBlank()) list = list.filter { video -> tag in labelsOf(video) }
         val query = exploreQuery.text.toString().trim().lowercase()
         if (query.isNotBlank()) list = list.filter { video ->
             video.caption.lowercase().contains(query) ||

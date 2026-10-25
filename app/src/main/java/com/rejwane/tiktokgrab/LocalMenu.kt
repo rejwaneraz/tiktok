@@ -14,7 +14,7 @@ object LocalMenu {
     fun show(host: AppCompatActivity, clip: LocalVideo, profiles: List<String>,
              onDeleted: () -> Unit, onMoved: () -> Unit) {
         val labels = arrayOf("Delete", "Share", "Play in another app", "Open on TikTok",
-            "Copy file name", "Move to profile")
+            "Copy file name", "Move to profile", "Tags…")
         MaterialAlertDialogBuilder(host)
             .setTitle(clip.caption.ifBlank { clip.name })
             .setItems(labels) { _, which ->
@@ -25,8 +25,59 @@ object LocalMenu {
                     3 -> openOnTikTok(host, clip)
                     4 -> copy(host, clip)
                     5 -> move(host, clip, profiles, onMoved)
+                    6 -> tag(host, clip, onMoved)
                 }
             }
+            .show()
+    }
+
+    /**
+     * Hand-made tags, which win over the ones guessed from a caption. They also decide the folder a
+     * training frame is exported into, so this is the one place the user teaches the app anything.
+     */
+    private fun tag(host: AppCompatActivity, clip: LocalVideo, onChanged: () -> Unit) {
+        val key = ClipTags.key(clip.clipId, clip.name)
+        val known = ClipTags.known(host)
+        if (known.isEmpty()) {
+            newTag(host, key, onChanged)
+            return
+        }
+        val current = ClipTags.of(host, key).toMutableSet()
+        val checked = known.map { it in current }.toBooleanArray()
+        // No setMessage here: a message and a list cannot share this dialog (the message wins and
+        // the checkboxes never appear, which is exactly what broke the List order picker).
+        MaterialAlertDialogBuilder(host)
+            .setTitle("Tags for this clip")
+            .setMultiChoiceItems(known.toTypedArray(), checked) { _, which, isChecked ->
+                if (isChecked) current.add(known[which]) else current.remove(known[which])
+            }
+            .setPositiveButton("Save") { _, _ ->
+                ClipTags.set(host, key, current.toList())
+                onChanged()
+            }
+            .setNeutralButton("New tag") { _, _ -> newTag(host, key, onChanged) }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun newTag(host: AppCompatActivity, key: String, onChanged: () -> Unit) {
+        val input = android.widget.EditText(host).apply {
+            hint = "e.g. Lehenga"
+            setSingleLine()
+            setPadding(48, 32, 48, 32)
+        }
+        MaterialAlertDialogBuilder(host)
+            .setTitle("New tag")
+            .setView(input)
+            .setPositiveButton("Add") { _, _ ->
+                val name = input.text.toString().trim()
+                if (name.isNotBlank()) {
+                    ClipTags.remember(host, name)
+                    ClipTags.set(host, key, ClipTags.of(host, key) + name)
+                    onChanged()
+                }
+            }
+            .setNegativeButton("Cancel", null)
             .show()
     }
 

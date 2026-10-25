@@ -155,6 +155,14 @@ with the listing — against a small Bangla/Banglish/English table. A tag become
 least two clips carry it, so a single clip never invents a category. The limit is real and stated in
 the code: a clip whose caption says nothing lands in no tag.
 
+### 2026-10-26 — tags can be taught, and frames can be exported for a model
+Guessed tags only reach as far as a caption's words, so a person can now say what a clip is: long
+press → Tags, pick from the list or type a new one. A hand-made tag beats a guessed one, shows on
+Explore even with a single clip (a deliberate label is not a guess), and decides the folder a training
+frame lands in. Settings → Export frames writes one 480 px JPEG per clip under
+`Backup/frames/<tag>/`, skipping what is already there and stopping on demand; the folders are the
+labelled training set, and nothing leaves the phone until the user copies them out.
+
 ## Measured, from a real request (2026-10-20)
 
 `https://www.tikwm.com/api/?url=<video>&hd=1` → 200, 7.2 KB, 2.1 s: `duration`, `size`, `hd_size`,

@@ -49,6 +49,7 @@ class MainActivity : AppCompatActivity() {
     private var tikWeb: TikTokWeb? = null
     private var task: Job? = null
     private var commentTask: Job? = null
+    private var exportTask: Job? = null
     private var commentDone = 0
     private var commentTotal = 0
     private var lastPercent = -1
@@ -339,6 +340,10 @@ class MainActivity : AppCompatActivity() {
                     }
                     .show()
             },
+            SettingsAdapter.Row("Export frames",
+                if (FrameExport.folder(this).isDirectory) "on disk" else "none", "Training") {
+                exportFrames()
+            },
             SettingsAdapter.Row("Version", packageVersion(), "About") {
                 note("TikTok Grab", lines("Version ${packageVersion()}", "Built for one person's own library."))
             },
@@ -356,6 +361,67 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun lines(vararg parts: String) = parts.joinToString("\n")
+
+    /**
+     * One still frame per clip, into a folder named after its first tag, so the training set is
+     * already labelled by the person who tagged it. Nothing leaves the phone; the folder is under
+     * Downloads and can be copied to a PC with a cable or a zip.
+     */
+    private fun exportFrames() {
+        if (!Vault.granted(this)) {
+            askForAccess()
+            return
+        }
+        if (libraryCache.isEmpty()) {
+            // Settings can be opened before the first library scan finishes.
+            lifecycleScope.launch {
+                libraryCache = LocalVideos.scanOf(this@MainActivity)
+                if (libraryCache.isEmpty()) {
+                    note("Export frames", lines("The library is empty.", "", "Download something first."))
+                } else {
+                    startExport(libraryCache)
+                }
+            }
+            return
+        }
+        startExport(libraryCache)
+    }
+
+    private fun startExport(videos: List<LocalVideo>) {
+        val progress = TextView(this).apply {
+            setPadding(52, 36, 52, 0)
+            text = "Preparing…"
+        }
+        val dialog = MaterialAlertDialogBuilder(this)
+            .setTitle("Export frames")
+            .setView(progress)
+            .setNegativeButton("Stop", null)
+            .create()
+        dialog.setOnDismissListener { exportTask?.cancel() }
+        dialog.show()
+        exportTask = lifecycleScope.launch {
+            val written = try {
+                withContext(Dispatchers.IO) {
+                    FrameExport.export(this@MainActivity, videos) { done, total, tag ->
+                        runOnUiThread { progress.text = "$done / $total · $tag" }
+                    }
+                }
+            } catch (e: CancellationException) {
+                -2
+            }
+            exportTask = null
+            dialog.setOnDismissListener(null)
+            dialog.dismiss()
+            note("Frames", when {
+                written < 0 -> lines("Stopped. Whatever was already written stays.",
+                    "", "Download/TikTokGrab/Backup/frames")
+                else -> lines("$written frames written to",
+                    "Download/TikTokGrab/Backup/frames",
+                    "",
+                    "Each folder is a tag. Copy them to the PC to train a model.")
+            })
+        }
+    }
 
     /**
      * The one thing no dialog can do for us: All files access is a switch on a system page. This
