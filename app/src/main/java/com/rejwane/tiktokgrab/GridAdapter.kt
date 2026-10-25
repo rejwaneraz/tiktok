@@ -38,13 +38,19 @@ class GridAdapter(
         )
     }
 
+    /**
+     * Always re-arranges, even when the order is already the one asked for: a list that arrived
+     * while the setting was remembered can be unsorted, and an early return left it that way.
+     */
     fun setOrder(next: Order) {
-        if (order == next) return
         order = next
         arrange()
         notifyDataSetChanged()
         onSelectionChanged()
     }
+
+    /** What the first cover holds after a sort — printed in the status line as proof. */
+    fun topPlays(): Long = items.maxOfOrNull { it.stat.plays } ?: 0L
 
     fun submit(list: List<Clip>, alreadySaved: Set<String>) {
         raw.clear()

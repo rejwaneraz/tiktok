@@ -506,8 +506,11 @@ class MainActivity : AppCompatActivity() {
                     .putString("list_order", if (which == 1) "popular" else "latest").apply()
                 adapter.setOrder(if (which == 1) GridAdapter.Order.POPULAR else GridAdapter.Order.LATEST)
                 paintListOrder()
-                // Say it out loud: a silent re-order looked like the tap did nothing.
-                statusView.text = if (which == 1) "Sorted by play count" else "Newest first"
+                // Say it out loud, with the number the first cover now holds: a silent re-order
+                // looked exactly like a tap that did nothing.
+                statusView.text = if (which == 1)
+                    "Popular · top ${GridAdapter.short(adapter.topPlays())} plays"
+                else "Latest · newest first"
                 dialog.dismiss()
             }
             .show()
