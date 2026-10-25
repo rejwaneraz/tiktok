@@ -29,7 +29,13 @@ class GridAdapter(
 
     private fun arrange() {
         items.clear()
-        items.addAll(if (order == Order.POPULAR) raw.sortedByDescending { it.stat.plays } else raw)
+        items.addAll(
+            if (order == Order.POPULAR) raw.sortedWith(
+                compareByDescending<Clip> { it.stat.plays }
+                    .thenByDescending { it.stat.likes }
+                    .thenByDescending { it.stat.comments }
+            ) else raw
+        )
     }
 
     fun setOrder(next: Order) {
@@ -130,6 +136,7 @@ class GridAdapter(
         val thumb: ImageView = view.findViewById(R.id.thumb)
         val check: CheckBox = view.findViewById(R.id.check)
         val savedBadge: TextView = view.findViewById(R.id.savedBadge)
+        val playsBadge: TextView = view.findViewById(R.id.playsBadge)
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, type: Int) =
@@ -149,6 +156,9 @@ class GridAdapter(
         holder.check.visibility = if (selectMode) View.VISIBLE else View.GONE
         holder.check.isChecked = on
         holder.savedBadge.visibility = if (clip.id in saved) View.VISIBLE else View.GONE
+        // TikTok puts the play count on the cover; here it also proves what Popular sorted by.
+        holder.playsBadge.text = if (clip.stat.plays > 0) "▶ ${short(clip.stat.plays)}" else "▶ —"
+        holder.playsBadge.visibility = View.VISIBLE
         holder.root.setOnClickListener {
             if (selectMode) {
                 if (!selected.add(clip.id)) selected.remove(clip.id)

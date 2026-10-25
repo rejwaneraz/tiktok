@@ -89,16 +89,26 @@ object TikTokApi {
         return candidates.maxByOrNull { it.first }?.second ?: ""
     }
 
-    /** Everything the rail shows: TikTok's own counts for this clip, plus its sound. */
+    /**
+     * Counts arrive in `stats` as numbers and, on some responses, in `statsV2` as strings. Reading
+     * only the first shape left every count at zero — which quietly made "Popular" do nothing.
+     */
     private fun statOf(item: JSONObject): Stat {
-        val stats = item.optJSONObject("stats") ?: JSONObject()
+        val plain = item.optJSONObject("stats") ?: JSONObject()
+        val text = item.optJSONObject("statsV2") ?: JSONObject()
+        fun count(key: String): Long {
+            val direct = plain.optLong(key, 0L)
+            if (direct > 0) return direct
+            val digits = text.optString(key).filter { it.isDigit() }
+            return digits.toLongOrNull() ?: 0L
+        }
         val music = item.optJSONObject("music") ?: JSONObject()
         return Stat(
-            plays = stats.optLong("playCount"),
-            likes = stats.optLong("diggCount"),
-            comments = stats.optLong("commentCount"),
-            collects = stats.optLong("collectCount"),
-            shares = stats.optLong("shareCount"),
+            plays = count("playCount"),
+            likes = count("diggCount"),
+            comments = count("commentCount"),
+            collects = count("collectCount"),
+            shares = count("shareCount"),
             sound = music.optString("title"),
             soundAuthor = music.optString("authorName")
         )
