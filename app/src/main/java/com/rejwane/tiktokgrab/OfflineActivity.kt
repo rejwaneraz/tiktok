@@ -127,13 +127,16 @@ class OfflineActivity : AppCompatActivity(), OfflineAdapter.Listener {
         })
         buildChips()
 
-        videos = LocalVideos.scan(this)
         val startUri = OfflineQueue.startUri
         OfflineQueue.startUri = null
-        // A fresh roll every time the feed opens, the way TikTok does it; tab switches reuse it.
-        val list = LocalVideos.forYou(this, videos, fresh = true)
-        show(list, list.indexOfFirst { it.uri == startUri })
-        fetchAvatars()
+        // The folder is read off the main thread, so the shell draws before the list is ready.
+        lifecycleScope.launch {
+            videos = LocalVideos.scanOf(this@OfflineActivity)
+            // A fresh roll every time the feed opens, the way TikTok does it; tab switches reuse it.
+            val list = LocalVideos.forYou(this@OfflineActivity, videos, fresh = true)
+            show(list, list.indexOfFirst { it.uri == startUri })
+            fetchAvatars()
+        }
     }
 
     // region the feed
@@ -683,8 +686,10 @@ class OfflineActivity : AppCompatActivity(), OfflineAdapter.Listener {
                 refresh()
             },
             onMoved = {
-                videos = LocalVideos.scan(this)
-                refresh()
+                lifecycleScope.launch {
+                    videos = LocalVideos.scanOf(this@OfflineActivity)
+                    refresh()
+                }
             })
     }
 
@@ -712,9 +717,25 @@ class OfflineActivity : AppCompatActivity(), OfflineAdapter.Listener {
 
     override fun onResume() {
         super.onResume()
-        videos = LocalVideos.scan(this)
         tick.postDelayed(pulse, 400)
+        // Resume first, then look for new files off the main thread: only a real change redraws.
         if (section == FEED) adapter?.playAt(position) else refresh()
+        rescan()
+    }
+
+    /**
+     * A download finishing on another screen, or a file removed by a manager, is the only reason the
+     * list changes while this screen is alive. The read happens on IO, and the screens are left alone
+     * when nothing moved — which is most of the time.
+     */
+    private fun rescan() {
+        lifecycleScope.launch {
+            val fresh = LocalVideos.scanOf(this@OfflineActivity)
+            val before = videos.map { it.uri }
+            val after = fresh.map { it.uri }
+            videos = fresh
+            if (before != after) refresh()
+        }
     }
 
     override fun onPause() {

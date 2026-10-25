@@ -66,6 +66,8 @@ object Avatars {
                 crossfade(false)
                 placeholder(R.drawable.avatar_ring)
                 transformations(CircleCropTransformation())
+                // The largest circle this is drawn in is about 96 dp; the stored picture is bigger.
+                size(400)
             }
         } else {
             target.setImageResource(R.drawable.avatar_ring)

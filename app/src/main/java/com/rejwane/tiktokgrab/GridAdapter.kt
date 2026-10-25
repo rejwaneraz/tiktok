@@ -15,15 +15,35 @@ class GridAdapter(
     private val onSelectionChanged: () -> Unit
 ) : RecyclerView.Adapter<GridAdapter.Holder>() {
 
+    /** Latest is the order TikTok hands them in; Popular is the same set by the play count we hold. */
+    enum class Order { LATEST, POPULAR }
+
+    private val raw = ArrayList<Clip>()
     private val items = ArrayList<Clip>()
     private val selected = HashSet<String>()
     private val saved = HashSet<String>()
     var selectMode = false
         private set
+    var order = Order.LATEST
+        private set
+
+    private fun arrange() {
+        items.clear()
+        items.addAll(if (order == Order.POPULAR) raw.sortedByDescending { it.stat.plays } else raw)
+    }
+
+    fun setOrder(next: Order) {
+        if (order == next) return
+        order = next
+        arrange()
+        notifyDataSetChanged()
+        onSelectionChanged()
+    }
 
     fun submit(list: List<Clip>, alreadySaved: Set<String>) {
-        items.clear()
-        items.addAll(list)
+        raw.clear()
+        raw.addAll(list)
+        arrange()
         selected.clear()
         saved.clear()
         saved.addAll(alreadySaved)
@@ -38,9 +58,16 @@ class GridAdapter(
      */
     fun append(list: List<Clip>) {
         if (list.isEmpty()) return
-        val start = items.size
-        items.addAll(list)
-        notifyItemRangeInserted(start, list.size)
+        raw.addAll(list)
+        if (order == Order.POPULAR) {
+            // Sorted view: the new page has to find its own place, so the whole grid is re-ordered.
+            arrange()
+            notifyDataSetChanged()
+        } else {
+            val start = items.size
+            items.addAll(list)
+            notifyItemRangeInserted(start, list.size)
+        }
         onSelectionChanged()
     }
 
@@ -114,7 +141,11 @@ class GridAdapter(
         val clip = items[position]
         val on = clip.id in selected
         holder.root.setBackgroundResource(if (on) R.drawable.card_bg_selected else R.drawable.card_bg)
-        holder.thumb.load(clip.thumb) { crossfade(false) }
+        holder.thumb.load(clip.thumb) {
+            crossfade(false)
+            // The cell is about 120 dp wide: decoding TikTok's full cover for it is wasted time.
+            size(360)
+        }
         holder.check.visibility = if (selectMode) View.VISIBLE else View.GONE
         holder.check.isChecked = on
         holder.savedBadge.visibility = if (clip.id in saved) View.VISIBLE else View.GONE

@@ -43,6 +43,8 @@ object Theme {
 
 class App : android.app.Application() {
     override fun onCreate() {
+        // First line: everything after this is what the Settings screen reports as start-up cost.
+        Startup.beganAt = Startup.now()
         super.onCreate()
         CrashRecorder.install(this)
         Backup.restoreIfEmpty(this)

@@ -23,7 +23,15 @@ object Backup {
         Store.writeText(context, FOLDER, NAME, json)
     }
 
-    fun restoreIfEmpty(context: Context) = restore(context, force = false)
+    /**
+     * Reading the backup file is the slow part, and an install that already has its stores does not
+     * need it — so on an ordinary launch nothing is read from disk at all.
+     */
+    fun restoreIfEmpty(context: Context) {
+        val anyEmpty = stores.any { context.getSharedPreferences(it, Context.MODE_PRIVATE).all.isEmpty() }
+        if (!anyEmpty) return
+        restore(context, force = false)
+    }
 
     /** Without force this only fills stores that are still empty, so a live install is untouched. */
     fun restore(context: Context, force: Boolean) {

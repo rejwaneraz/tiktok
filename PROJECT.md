@@ -134,6 +134,19 @@ The first icons were traced from a 40 px sheet and emitted as straight segments,
 facets at 32 dp. The large reference art is traced instead, resampled evenly, smoothed, and written as
 cubic Beziers (56 per glyph), so the rail is crisp at any density.
 
+### 2026-10-25 — nothing that touches the disk runs on the frame thread
+Opening the app used to list the library, query MediaStore and rename files on the main thread, decode
+full-size TikTok covers into 120 dp cells, and read the backup file on every launch. Now the folder is
+read on IO (`LocalVideos.scanOf`), screens redraw only when the file set actually changed, thumbnails
+are decoded at 360 px, avatar pictures at 400 px, library frames with `getScaledFrameAtTime`, and the
+backup is skipped entirely when the stores already hold something. A Settings row reports the last
+start-up and scan in milliseconds, because without logcat that is the only honest way to know.
+
+### 2026-10-25 — Popular is a re-order, not another endpoint
+TikTok's grid offers Latest and Popular; the listing already arrives newest-first, so Latest is that
+order and Popular sorts the same clips by the play count the cover already shows. No undocumented
+parameter is guessed, and pages arriving later slide into their place.
+
 ## Measured, from a real request (2026-10-20)
 
 `https://www.tikwm.com/api/?url=<video>&hd=1` → 200, 7.2 KB, 2.1 s: `duration`, `size`, `hd_size`,

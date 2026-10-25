@@ -55,6 +55,9 @@ class MainActivity : AppCompatActivity() {
     private var section = LIST
     private val failed = ArrayList<Clip>()
 
+    /** The last folder read, so Settings and the library do not each scan the disk again. */
+    private var libraryCache: List<LocalVideo> = emptyList()
+
 
     private val countValues by lazy { resources.getIntArray(R.array.count_values) }
 
@@ -101,6 +104,10 @@ class MainActivity : AppCompatActivity() {
             override fun onNothingSelected(parent: AdapterView<*>?) = Unit
         }
 
+        adapter.setOrder(savedListOrder())
+        paintListOrder()
+        findViewById<TextView>(R.id.orderChip).setOnClickListener { pickListOrder() }
+
         findViewById<Button>(R.id.loginBtn).setOnClickListener {
             loginLauncher.launch(Intent(this, LoginActivity::class.java))
         }
@@ -130,6 +137,9 @@ class MainActivity : AppCompatActivity() {
         showSelection()
         showSection(LIBRARY)
         if (intent.getBooleanExtra(CLIP_EXTRA, false)) fromClipboard()
+
+        // The number the Start-up row reports: process start → this screen actually drawn.
+        window.decorView.post { Startup.firstFrameMs = Startup.now() - Startup.beganAt }
 
         // Android cannot ask for All files access at install time, and a fresh install has nothing
         // in the library yet — so the first launch is where the switch has to be explained.
@@ -218,7 +228,9 @@ class MainActivity : AppCompatActivity() {
 
     /** TikTok-shaped list: grey section captions, then rows with the current value on the right. */
     private fun showSettings() {
-        val saved = LocalVideos.scan(this)
+        // The folder was already read by the library refresh; scanning again here would be a disk
+        // read on the thread that draws.
+        val saved = libraryCache
         val size = GridAdapter.mb(saved.sumOf { it.bytes })
         settingsList.adapter = SettingsAdapter(listOf(
             SettingsAdapter.Row("Appearance", Theme.label(this), "Preferences") { pickTheme() },
@@ -317,6 +329,16 @@ class MainActivity : AppCompatActivity() {
             },
             SettingsAdapter.Row("Version", packageVersion(), "About") {
                 note("TikTok Grab", lines("Version ${packageVersion()}", "Built for one person's own library."))
+            },
+            SettingsAdapter.Row("Start-up",
+                if (Startup.firstFrameMs > 0) "${Startup.firstFrameMs} ms" else "measuring", "About") {
+                note("Start-up", lines(
+                    "First frame: ${Startup.firstFrameMs} ms after process start",
+                    "Last library scan: ${Startup.scanMs} ms, on a background thread",
+                    "",
+                    "If the first number is large but the scan is small, the cost is before our",
+                    "first screen — the system starting the app, not the folder."
+                ))
             }
         ))
     }
@@ -446,19 +468,48 @@ class MainActivity : AppCompatActivity() {
 
     /** The folder is the truth: whatever sits in Download/TikTokGrab is what this tab shows. */
     private fun refreshLibrary() {
-        val saved = sortedForLibrary(LocalVideos.scan(this))
-        val profiles = saved.map { it.author }.distinct()
-        libraryList.adapter = LocalGridAdapter(saved, onOpen = { openOffline(it) }, onMenu = { clip ->
-            LocalMenu.show(this, clip, profiles,
-                onDeleted = { refreshLibrary() }, onMoved = { refreshLibrary() })
-        })
-        findViewById<TextView>(R.id.librarySort).text =
-            "${libraryOrders[libraryOrder().coerceIn(0, libraryOrders.size - 1)]} ▾"
-        statusView.text = if (saved.isEmpty()) getString(R.string.library_empty)
-        else "${saved.size} saved · ${GridAdapter.mb(saved.sumOf { it.bytes })}"
+        lifecycleScope.launch {
+            val saved = sortedForLibrary(LocalVideos.scanOf(this@MainActivity))
+            libraryCache = saved
+            val profiles = saved.map { it.author }.distinct()
+            libraryList.adapter = LocalGridAdapter(saved, onOpen = { openOffline(it) }, onMenu = { clip ->
+                LocalMenu.show(this@MainActivity, clip, profiles,
+                    onDeleted = { refreshLibrary() }, onMoved = { refreshLibrary() })
+            })
+            findViewById<TextView>(R.id.librarySort).text =
+                "${libraryOrders[libraryOrder().coerceIn(0, libraryOrders.size - 1)]} ▾"
+            statusView.text = if (saved.isEmpty()) getString(R.string.library_empty)
+            else "${saved.size} saved · ${GridAdapter.mb(saved.sumOf { it.bytes })}"
+        }
     }
 
     private val libraryOrders = arrayOf("Newest first", "Largest first", "Most played", "Random")
+
+    /** Latest is what TikTok sends; Popular is the same page re-ordered by its own play count. */
+    private fun savedListOrder(): GridAdapter.Order =
+        if (getSharedPreferences("ui", MODE_PRIVATE).getString("list_order", "latest") == "popular")
+            GridAdapter.Order.POPULAR else GridAdapter.Order.LATEST
+
+    private fun paintListOrder() {
+        findViewById<TextView>(R.id.orderChip).text =
+            if (adapter.order == GridAdapter.Order.POPULAR) "Popular ▾" else "Latest ▾"
+    }
+
+    private fun pickListOrder() {
+        val names = arrayOf("Latest", "Popular")
+        val now = if (adapter.order == GridAdapter.Order.POPULAR) 1 else 0
+        MaterialAlertDialogBuilder(this)
+            .setTitle("List order")
+            .setMessage("Popular uses the play count TikTok shows on each cover.")
+            .setSingleChoiceItems(names, now) { dialog, which ->
+                getSharedPreferences("ui", MODE_PRIVATE).edit()
+                    .putString("list_order", if (which == 1) "popular" else "latest").apply()
+                adapter.setOrder(if (which == 1) GridAdapter.Order.POPULAR else GridAdapter.Order.LATEST)
+                paintListOrder()
+                dialog.dismiss()
+            }
+            .show()
+    }
 
     private fun libraryOrder() =
         getSharedPreferences("ui", MODE_PRIVATE).getInt("library_order", 0)

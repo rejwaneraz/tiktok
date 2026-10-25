@@ -14,6 +14,8 @@ import android.util.LruCache
 import android.util.Size
 import android.widget.ImageView
 import android.widget.TextView
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.io.File
 import java.text.SimpleDateFormat
@@ -62,6 +64,19 @@ object LocalVideos {
 
     fun sanitize(name: String) =
         name.filterNot { ILLEGAL.contains(it) }.trim().trim('.').ifBlank { UNASSIGNED }
+
+    /**
+     * Listing the folder costs disk reads and a MediaStore query, so it never runs on the thread that
+     * draws. The time it took is kept for the Settings screen.
+     */
+    suspend fun scanOf(context: Context): List<LocalVideo> = withContext(Dispatchers.IO) {
+        val began = Startup.now()
+        try {
+            scan(context)
+        } finally {
+            Startup.scanMs = Startup.now() - began
+        }
+    }
 
     fun scan(context: Context): List<LocalVideo> {
         // Older builds wrote .tgr (and, even earlier, .mp4) into the same folder: rename them once so
@@ -258,7 +273,18 @@ object LocalThumbs {
             retriever.setDataSource(context, video.uri)
             retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
                 ?.toLongOrNull()?.div(1000)?.toInt()?.let { durations[video.key] = it }
-            retriever.getFrameAtTime(3_000_000)
+            // A full-size frame for a 120 dp cell is a lot of pixels to decode and throw away.
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+                retriever.getScaledFrameAtTime(
+                    3_000_000, MediaMetadataRetriever.OPTION_CLOSEST_SYNC, 280, 400
+                )
+            } else {
+                retriever.getFrameAtTime(3_000_000)?.let { full ->
+                    val small = Bitmap.createScaledBitmap(full, 280, 400, true)
+                    if (small !== full) full.recycle()
+                    small
+                }
+            }
         }.getOrNull()
         runCatching { retriever.release() }
         // The system can only hand back a picture for media it indexes itself; our own files are not
