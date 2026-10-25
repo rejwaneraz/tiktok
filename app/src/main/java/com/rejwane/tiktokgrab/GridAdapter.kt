@@ -32,6 +32,18 @@ class GridAdapter(
         onSelectionChanged()
     }
 
+    /**
+     * A later page arriving while the grid is already on screen. Appending keeps the scroll position
+     * and everything already ticked, so a long listing stays usable while it streams in.
+     */
+    fun append(list: List<Clip>) {
+        if (list.isEmpty()) return
+        val start = items.size
+        items.addAll(list)
+        notifyItemRangeInserted(start, list.size)
+        onSelectionChanged()
+    }
+
     fun enterSelect(id: String) {
         selectMode = true
         selected.add(id)

@@ -168,14 +168,16 @@ class MainActivity : AppCompatActivity() {
         )
     }
 
+    /** 0 means "everything the account has": the listing keeps paging until TikTok runs out. */
     private fun wantedLimit(): Int {
         val picked = countPick.selectedItemPosition
-        return if (picked < countValues.size && countValues[picked] > 0) countValues[picked] else TikTokApi.CAP
+        return if (picked in countValues.indices && countValues[picked] > 0) countValues[picked] else 0
     }
 
     private fun showEstimate() {
-        val pages = (wantedLimit() + 14) / 15
-        estimateView.text = "list ~${(pages * 0.4).format1()} MB · best quality"
+        val limit = wantedLimit()
+        estimateView.text = if (limit <= 0) "everything · ~0.4 MB per 15 · loads live"
+        else "list ~${(((limit + 14) / 15) * 0.4).format1()} MB · best quality"
     }
 
     private fun showSelection() {
@@ -520,13 +522,27 @@ class MainActivity : AppCompatActivity() {
 
         task = lifecycleScope.launch {
             try {
-                val result = TikTokApi.list(this@MainActivity, web, query, wantedLimit()) { count ->
-                    runOnUiThread { statusView.text = "Loading… $count" }
-                }
+                var shown = false
+                val result = TikTokApi.list(this@MainActivity, web, query, wantedLimit(),
+                    onPage = { fresh ->
+                        // The first page replaces the grid; every later one is appended in place.
+                        runOnUiThread {
+                            if (!shown) {
+                                adapter.submit(fresh, Downloader.doneIds(this@MainActivity))
+                                shown = true
+                                refresh.isRefreshing = false
+                            } else {
+                                adapter.append(fresh)
+                            }
+                            statusView.text = "${adapter.count()} videos · still loading…"
+                        }
+                    }
+                ) { count -> runOnUiThread { statusView.text = "Loading… $count loaded" } }
                 val user = TikTokApi.username(result.source)
                 val clips = result.clips
                 Session.good(this@MainActivity)
-                adapter.submit(clips, Downloader.doneIds(this@MainActivity))
+                // A single-video answer never streams a page, so it is placed here.
+                if (!shown) adapter.submit(clips, Downloader.doneIds(this@MainActivity))
                 val already = clips.count { it.id in Downloader.doneIds(this@MainActivity) }
                 val savedNote = if (already > 0) " · $already already downloaded" else ""
 

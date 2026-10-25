@@ -29,7 +29,6 @@ object TikTokApi {
     private const val TAG = "tiktokgrab"
     private const val ITEM_LIST = "https://www.tiktok.com/api/creator/item_list/"
     private const val PAGE = 15          // TikTok rejects any other count
-    const val CAP = 500                  // ~0.4 MB of JSON per page
     private const val SEARCH_PAGES = 12  // a video link searches back this far (~5 MB worst case)
     private const val PREF = "secuids"
 
@@ -191,6 +190,7 @@ object TikTokApi {
             "&os=windows&language=en&msToken=" + msToken()
 
     suspend fun list(context: Context, web: TikTokWeb, input: String, limit: Int,
+                     onPage: (List<Clip>) -> Unit = {},
                      onProgress: (Int) -> Unit): Listing = withContext(Dispatchers.IO) {
         val source = normalize(input)
         val user = username(source)
@@ -206,7 +206,8 @@ object TikTokApi {
             throw RuntimeException("@$user — TikTok would not open the profile page. Check the name " +
                 "is public, or log in again from Settings.")
         }
-        val wanted = if (limit <= 0) CAP else minOf(limit, CAP)
+        // 0 means everything the account has: pages keep coming until TikTok says there are none.
+        val wanted = if (limit <= 0) Int.MAX_VALUE else limit
         val out = ArrayList<Clip>()
         val seen = HashSet<String>()
         var cursor = ""
@@ -222,13 +223,20 @@ object TikTokApi {
             pages++
             val clips = parse(context, data, user)
             clips.firstOrNull { it.id == wantedId }?.let { match = it }
-            for (clip in clips) {
-                if (seen.add(clip.id)) out.add(clip)
+            val fresh = ArrayList<Clip>()
+            for (clip in clips) if (seen.add(clip.id)) fresh.add(clip)
+            val room = (wanted - out.size).coerceAtLeast(0)
+            val take = if (fresh.size > room) fresh.subList(0, room) else fresh
+            if (take.isNotEmpty()) {
+                out.addAll(take)
+                // The grid shows this page while the next one is still on the wire.
+                onPage(ArrayList(take))
             }
             ClipStats.save(context, clips.associate { it.id to it.stat })
             onProgress(out.size)
             if (match != null) break
-            if (wantedId == null && out.size >= wanted) break
+            if (out.size >= wanted) break
+            if (take.isEmpty()) break   // a page of nothing new: stop instead of spinning
             if (!data.optBoolean("hasMorePrevious")) break
             if (wantedId != null && pages >= SEARCH_PAGES) break
             val last = batch.optJSONObject(batch.length() - 1)?.optLong("createTime") ?: break
@@ -251,7 +259,6 @@ object TikTokApi {
                     "or the session expired. Tap again — cache cleared."
             )
         }
-        if (out.size > wanted) out.subList(wanted, out.size).clear()
         Log.d(TAG, "listed ${out.size} clips for $user")
         Listing(out, source, null, pages)
     }

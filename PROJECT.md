@@ -122,6 +122,18 @@ vector file of 0.7–1.2 KB, so it stays sharp at every size and a state is a ti
 The heart, bubble, arrow, bookmark and note are the picture's own shapes; the launcher mark is the
 artwork itself, with a black adaptive background and the disc inside the safe zone.
 
+### 2026-10-25 — the listing streams, and "All" means all
+The reader answers 15 clips per page and the app used to walk every page before touching the grid, so
+a 500-clip account showed nothing for seconds and then stopped at the cap. Now each page is handed to
+the UI the moment it is parsed: the first 15 appear in about a second, later pages append without
+moving the scroll or the ticks. "All" no longer stops at 500 — paging continues until TikTok says
+`hasMorePrevious=false`, and a page that adds nothing new ends the walk instead of spinning.
+
+### 2026-10-25 — smooth icons, from the large reference art
+The first icons were traced from a 40 px sheet and emitted as straight segments, which showed as
+facets at 32 dp. The large reference art is traced instead, resampled evenly, smoothed, and written as
+cubic Beziers (56 per glyph), so the rail is crisp at any density.
+
 ## Measured, from a real request (2026-10-20)
 
 `https://www.tikwm.com/api/?url=<video>&hd=1` → 200, 7.2 KB, 2.1 s: `duration`, `size`, `hd_size`,

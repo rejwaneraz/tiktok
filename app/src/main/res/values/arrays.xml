@@ -5,7 +5,7 @@
         <item>50</item>
         <item>100</item>
         <item>200</item>
-        <item>All (500)</item>
+        <item>All</item>
     </string-array>
     <integer-array name="count_values">
         <item>15</item>
