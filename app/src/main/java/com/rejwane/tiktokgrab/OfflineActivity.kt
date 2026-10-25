@@ -44,6 +44,9 @@ class OfflineActivity : AppCompatActivity(), OfflineAdapter.Listener {
     private var order = NEWEST
     private var scope = ALL
 
+    /** The tag chip the user picked in Explore; empty means no tag filter. */
+    private var tag = ""
+
     // One gesture state machine for the whole feed; see onDrag.
     private var dragMode = DRAG_NONE
     private var dragFromX = 0f
@@ -68,6 +71,8 @@ class OfflineActivity : AppCompatActivity(), OfflineAdapter.Listener {
     private val exploreRoot by lazy { findViewById<View>(R.id.exploreRoot) }
     private val exploreQuery by lazy { findViewById<EditText>(R.id.exploreQuery) }
     private val exploreChips by lazy { findViewById<LinearLayout>(R.id.exploreChips) }
+    private val exploreTags by lazy { findViewById<LinearLayout>(R.id.exploreTags) }
+    private val exploreTagsScroll by lazy { findViewById<View>(R.id.exploreTagsScroll) }
     private val exploreGrid by lazy { findViewById<RecyclerView>(R.id.exploreGrid) }
     private val authorList by lazy { findViewById<RecyclerView>(R.id.authorList) }
     private val profileRoot by lazy { findViewById<View>(R.id.profileRoot) }
@@ -471,6 +476,48 @@ class OfflineActivity : AppCompatActivity(), OfflineAdapter.Listener {
         }
     }
 
+    /**
+     * The library tags itself: every clip is matched against the word table in Tags, and a tag only
+     * becomes a chip when at least two clips carry it — one clip is not a category.
+     */
+    private fun tagCounts(): List<Pair<String, Int>> {
+        val counts = HashMap<String, Int>()
+        videos.forEach { video ->
+            Tags.of(video, ClipStats.of(this, video.clipId)).forEach { label ->
+                counts[label] = (counts[label] ?: 0) + 1
+            }
+        }
+        return counts.entries
+            .filter { it.value >= 2 }
+            .sortedByDescending { it.value }
+            .take(8)
+            .map { it.key to it.value }
+    }
+
+    private fun buildTagChips() {
+        exploreTags.removeAllViews()
+        val counts = tagCounts()
+        if (counts.isEmpty()) {
+            exploreTagsScroll.visibility = View.GONE
+            tag = ""
+            return
+        }
+        if (tag.isNotBlank() && counts.none { it.first == tag }) tag = ""
+        exploreTagsScroll.visibility = View.VISIBLE
+        val gap = (8 * resources.displayMetrics.density).toInt()
+        counts.forEach { (label, count) ->
+            val view = chip("$label $count", tag == label) {
+                tag = if (tag == label) "" else label
+                buildTagChips()
+                fillExplore()
+            }
+            view.layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { marginEnd = gap }
+            exploreTags.addView(view)
+        }
+    }
+
     private fun chip(text: String, on: Boolean, onClick: () -> Unit) = TextView(this).apply {
         this.text = text
         setTextColor(getColor(if (on) R.color.on_accent else R.color.muted))
@@ -488,6 +535,9 @@ class OfflineActivity : AppCompatActivity(), OfflineAdapter.Listener {
             FOLLOWED -> videos.filter { Follows.isFollowing(this, it.author) }
             else -> videos
         }
+        if (tag.isNotBlank()) list = list.filter { video ->
+            Tags.of(video, ClipStats.of(this, video.clipId)).contains(tag)
+        }
         val query = exploreQuery.text.toString().trim().lowercase()
         if (query.isNotBlank()) list = list.filter { video ->
             video.caption.lowercase().contains(query) ||
@@ -499,6 +549,7 @@ class OfflineActivity : AppCompatActivity(), OfflineAdapter.Listener {
 
     private fun fillExplore() {
         if (section != EXPLORE) return
+        buildTagChips()
         val list = exploreList()
         exploreGrid.adapter = LocalGridAdapter(list, flat = true,
             onOpen = { show(list, list.indexOf(it)) },

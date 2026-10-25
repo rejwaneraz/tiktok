@@ -147,6 +147,14 @@ TikTok's grid offers Latest and Popular; the listing already arrives newest-firs
 order and Popular sorts the same clips by the play count the cover already shows. No undocumented
 parameter is guessed, and pages arriving later slide into their place.
 
+### 2026-10-25 — Explore tags itself, from words, not from the picture
+No ML model is bundled: a phone-side classifier that could tell a saree from a borka does not exist
+without our own training data, and the generic 400-label model only says "Clothing". So a clip is
+tagged by the words around it — caption, author, sound, file name, and any label TikTok itself sent
+with the listing — against a small Bangla/Banglish/English table. A tag becomes a chip only when at
+least two clips carry it, so a single clip never invents a category. The limit is real and stated in
+the code: a clip whose caption says nothing lands in no tag.
+
 ## Measured, from a real request (2026-10-20)
 
 `https://www.tikwm.com/api/?url=<video>&hd=1` → 200, 7.2 KB, 2.1 s: `duration`, `size`, `hd_size`,

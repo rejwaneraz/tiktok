@@ -130,6 +130,24 @@
                     android:orientation="horizontal" />
             </HorizontalScrollView>
 
+            <!-- Tags the library grew by itself: only ones with more than one clip survive. -->
+            <HorizontalScrollView
+                android:id="@+id/exploreTagsScroll"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:paddingStart="12dp"
+                android:paddingEnd="12dp"
+                android:scrollbars="none"
+                android:visibility="gone">
+
+                <LinearLayout
+                    android:id="@+id/exploreTags"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal" />
+            </HorizontalScrollView>
+
             <androidx.recyclerview.widget.RecyclerView
                 android:id="@+id/exploreGrid"
                 android:layout_width="match_parent"

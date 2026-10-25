@@ -110,8 +110,29 @@ object TikTokApi {
             collects = count("collectCount"),
             shares = count("shareCount"),
             sound = music.optString("title"),
-            soundAuthor = music.optString("authorName")
+            soundAuthor = music.optString("authorName"),
+            labels = labelsOf(item)
         )
+    }
+
+    /**
+     * TikTok sometimes ships its own labels with a post. They cost nothing when they are there and
+     * are simply empty when they are not — the Explore tags fall back to the caption's words.
+     */
+    private fun labelsOf(item: JSONObject): List<String> {
+        val out = LinkedHashSet<String>()
+        item.optJSONArray("diversificationLabels")?.let { arr ->
+            for (i in 0 until arr.length()) {
+                arr.optString(i).trim().takeIf { it.isNotBlank() }?.let { out.add(it) }
+            }
+        }
+        item.optJSONObject("videoTag")?.let { tag ->
+            listOf("videoTagName", "tagName", "name").forEach { key ->
+                tag.optString(key).trim().takeIf { it.isNotBlank() }?.let { out.add(it) }
+            }
+        }
+        item.optString("contentLabel").trim().takeIf { it.isNotBlank() }?.let { out.add(it) }
+        return out.toList().take(8)
     }
 
     private fun parse(context: Context, data: JSONObject, user: String): List<Clip> {

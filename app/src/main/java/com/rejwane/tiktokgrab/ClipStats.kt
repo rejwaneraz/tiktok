@@ -1,6 +1,7 @@
 package com.rejwane.tiktokgrab
 
 import android.content.Context
+import org.json.JSONArray
 import org.json.JSONObject
 
 /** The numbers TikTok showed for one clip the last time we read its list. */
@@ -11,7 +12,9 @@ data class Stat(
     val collects: Long = 0L,
     val shares: Long = 0L,
     val sound: String = "",
-    val soundAuthor: String = ""
+    val soundAuthor: String = "",
+    /** Labels TikTok itself attached to the post, when the listing carries them. */
+    val labels: List<String> = emptyList()
 ) {
     val known: Boolean get() = plays > 0 || likes > 0 || sound.isNotBlank()
 }
@@ -55,6 +58,8 @@ object ClipStats {
                 .put("s", maxOf(stat.shares, old?.optLong("s") ?: 0L))
                 .put("m", stat.sound.ifBlank { old?.optString("m") ?: "" })
                 .put("a", stat.soundAuthor.ifBlank { old?.optString("a") ?: "" })
+                .put("t", if (stat.labels.isNotEmpty()) JSONArray(stat.labels)
+                else old?.optJSONArray("t") ?: JSONArray())
             )
         }
         store(context).edit().putString(KEY, root.toString()).apply()
@@ -72,7 +77,10 @@ object ClipStats {
             collects = o.optLong("k"),
             shares = o.optLong("s"),
             sound = o.optString("m"),
-            soundAuthor = o.optString("a")
+            soundAuthor = o.optString("a"),
+            labels = o.optJSONArray("t")?.let { arr ->
+                (0 until arr.length()).mapNotNull { i -> arr.optString(i).takeIf { it.isNotBlank() } }
+            } ?: emptyList()
         )
     }
 }
