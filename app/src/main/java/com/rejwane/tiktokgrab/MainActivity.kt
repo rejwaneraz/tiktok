@@ -106,7 +106,19 @@ class MainActivity : AppCompatActivity() {
 
         adapter.setOrder(savedListOrder())
         paintListOrder()
-        findViewById<TextView>(R.id.orderChip).setOnClickListener { pickListOrder() }
+        findViewById<TextView>(R.id.orderChip).apply {
+            setOnClickListener { pickListOrder() }
+            setOnLongClickListener {
+                note("List order", lines(
+                    "Latest — the order TikTok sends the clips in.",
+                    "Popular — the same clips sorted by the play count on each cover.",
+                    "",
+                    "Tap the chip to switch. The status line under it shows the top count, so you",
+                    "can check that the sort really happened."
+                ))
+                true
+            }
+        }
 
         findViewById<Button>(R.id.loginBtn).setOnClickListener {
             loginLauncher.launch(Intent(this, LoginActivity::class.java))
@@ -496,24 +508,22 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun pickListOrder() {
-        val names = arrayOf("Latest", "Popular")
-        val now = if (adapter.order == GridAdapter.Order.POPULAR) 1 else 0
-        MaterialAlertDialogBuilder(this)
-            .setTitle("List order")
-            .setMessage("Popular uses the play count TikTok shows on each cover.")
-            .setSingleChoiceItems(names, now) { dialog, which ->
-                getSharedPreferences("ui", MODE_PRIVATE).edit()
-                    .putString("list_order", if (which == 1) "popular" else "latest").apply()
-                adapter.setOrder(if (which == 1) GridAdapter.Order.POPULAR else GridAdapter.Order.LATEST)
-                paintListOrder()
-                // Say it out loud, with the number the first cover now holds: a silent re-order
-                // looked exactly like a tap that did nothing.
-                statusView.text = if (which == 1)
-                    "Popular · top ${GridAdapter.short(adapter.topPlays())} plays"
-                else "Latest · newest first"
-                dialog.dismiss()
-            }
-            .show()
+        // A dialog was the fragile part: setMessage and setSingleChoiceItems cannot be used together
+        // (the message replaces the list, which is exactly what happened), so the chip switches on
+        // its own tap and explains itself on a long press. Nothing to go wrong between tap and sort.
+        applyListOrder(adapter.order != GridAdapter.Order.POPULAR)
+    }
+
+    private fun applyListOrder(popular: Boolean) {
+        getSharedPreferences("ui", MODE_PRIVATE).edit()
+            .putString("list_order", if (popular) "popular" else "latest").apply()
+        adapter.setOrder(if (popular) GridAdapter.Order.POPULAR else GridAdapter.Order.LATEST)
+        paintListOrder()
+        // Say it out loud, with the number the first cover now holds: a silent re-order looked
+        // exactly like a tap that did nothing.
+        statusView.text = if (popular)
+            "Popular · top ${GridAdapter.short(adapter.topPlays())} plays · ${adapter.count()} videos"
+        else "Latest · newest first · ${adapter.count()} videos"
     }
 
     private fun libraryOrder() =
