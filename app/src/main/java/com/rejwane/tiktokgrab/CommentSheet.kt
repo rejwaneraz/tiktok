@@ -144,9 +144,7 @@ class CommentAdapter(
         if (uri != null) {
             view.load(uri) { crossfade(false) }
             view.setOnClickListener {
-                ViewerQueue.uri = uri
-                    ViewerQueue.remote = ""
-                    ViewerQueue.count = 1
+                ViewerQueue.urls = listOf(uri.toString())
                 ViewerQueue.title = comment.name
                 context.startActivity(Intent(context, ImageViewerActivity::class.java))
             }

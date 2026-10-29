@@ -809,10 +809,8 @@ class MainActivity : AppCompatActivity() {
                 statusView.text = "This photo post has no picture address"
                 return
             }
-            ViewerQueue.uri = null
-            ViewerQueue.remote = first
+            ViewerQueue.urls = clip.images
             ViewerQueue.title = clip.title.ifBlank { "Photo post" }
-            ViewerQueue.count = clip.images.size
             startActivity(Intent(this, ImageViewerActivity::class.java))
             return
         }

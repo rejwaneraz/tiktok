@@ -481,9 +481,7 @@ class OfflineActivity : AppCompatActivity(), OfflineAdapter.Listener {
             openUrl(tiktokProfile(author))
             return
         }
-        ViewerQueue.uri = picture
-        ViewerQueue.remote = ""
-        ViewerQueue.count = 1
+        ViewerQueue.urls = listOf(picture.toString())
         ViewerQueue.title = Authors.get(this, author).display(author)
         startActivity(Intent(this, ImageViewerActivity::class.java))
     }

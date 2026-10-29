@@ -1,17 +1,20 @@
 package com.rejwane.tiktokgrab
 
 import android.content.ContentValues
+import android.graphics.Color
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Environment
 import android.provider.MediaStore
-import android.view.View
+import android.view.ViewGroup
 import android.widget.ImageView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
+import androidx.recyclerview.widget.RecyclerView
+import androidx.viewpager2.widget.ViewPager2
 import coil.load
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -20,72 +23,67 @@ import java.io.File
 import java.io.InputStream
 
 /**
- * Tapping a picture opens it full size; tapping anywhere closes it again. A picture that only lives
- * inside the app can be handed to the phone from here — a deliberate copy into Pictures, not the
- * hidden library file, so it shows up in a gallery the way a person expects.
+ * Every picture of a post, full size, swiped sideways — whether it is a comment's picture, a profile
+ * avatar, or a slideshow post that carries fourteen of them.
  *
- * A photo post from the listing is not on the phone yet, so it is shown from its own address and
- * saved the same way when asked. Tapping a thumbnail previews it; it never downloads by itself.
+ * Nothing is downloaded by opening this: Save is a deliberate copy into Pictures, and for a picture
+ * that is still online it is fetched once and written there.
  */
 class ImageViewerActivity : AppCompatActivity() {
+
+    private var urls: List<String> = emptyList()
 
     override fun onCreate(state: Bundle?) {
         super.onCreate(state)
         setContentView(R.layout.activity_viewer)
-        val local = ViewerQueue.uri
-        val remote = ViewerQueue.remote
-        if (local == null && remote.isBlank()) {
+        urls = ViewerQueue.urls
+        if (urls.isEmpty()) {
             finish()
             return
         }
         val title = ViewerQueue.title
-        val count = ViewerQueue.count
+        val pager = findViewById<ViewPager2>(R.id.viewerPager)
+        val counter = findViewById<TextView>(R.id.viewerCount)
+        pager.adapter = Pages(urls)
+        findViewById<TextView>(R.id.viewerName).text = title
 
-        findViewById<View>(R.id.viewerRoot).setOnClickListener { finish() }
-        findViewById<TextView>(R.id.viewerName).text =
-            if (count > 1) "$title · $count pictures" else title
-        val image = findViewById<ImageView>(R.id.viewerImage)
-        if (local != null) image.load(local) else image.load(remote)
-        findViewById<TextView>(R.id.viewerSave).setOnClickListener {
-            if (local != null) save(local) else saveRemote(remote)
+        fun paint(index: Int) {
+            counter.text = if (urls.size > 1) "${index + 1} / ${urls.size}" else ""
         }
-        ViewerQueue.uri = null
-        ViewerQueue.remote = ""
-        ViewerQueue.count = 1
+        paint(pager.currentItem)
+        pager.registerOnPageChangeCallback(object : ViewPager2.OnPageChangeCallback() {
+            override fun onPageSelected(position: Int) = paint(position)
+        })
+        findViewById<TextView>(R.id.viewerClose).setOnClickListener { finish() }
+        findViewById<TextView>(R.id.viewerSave).setOnClickListener { save(pager.currentItem) }
+        ViewerQueue.urls = emptyList()
     }
 
-    private fun save(picture: Uri) {
-        lifecycleScope.launch {
-            val ok = withContext(Dispatchers.IO) {
-                runCatching { writeToPictures { contentResolver.openInputStream(picture) } }
-                    .getOrDefault(false)
-            }
-            toast(ok)
-        }
-    }
-
-    private fun saveRemote(url: String) {
+    private fun save(index: Int) {
+        val url = urls.getOrNull(index) ?: return
         lifecycleScope.launch {
             val ok = withContext(Dispatchers.IO) {
                 runCatching {
-                    val temp = File.createTempFile("grab", ".jpg")
-                    try {
-                        if (!Http.save(url, temp)) return@runCatching false
-                        writeToPictures { temp.inputStream() }
-                    } finally {
-                        temp.delete()
+                    if (url.startsWith("http")) {
+                        val temp = File.createTempFile("grab", ".jpg")
+                        try {
+                            if (!Http.save(url, temp)) return@runCatching false
+                            writeToPictures { temp.inputStream() }
+                        } finally {
+                            temp.delete()
+                        }
+                    } else {
+                        writeToPictures { contentResolver.openInputStream(Uri.parse(url)) }
                     }
                 }.getOrDefault(false)
             }
-            toast(ok)
+            Toast.makeText(
+                this@ImageViewerActivity,
+                if (ok) "Saved to Pictures/TikTokGrab" else "Could not save this picture",
+                Toast.LENGTH_SHORT
+            ).show()
         }
     }
-
-    private fun toast(ok: Boolean) = Toast.makeText(
-        this,
-        if (ok) "Saved to Pictures/TikTokGrab" else "Could not save this picture",
-        Toast.LENGTH_SHORT
-    ).show()
 
     /** One writer for both cases: a local file and a picture fetched from its address. */
     private fun writeToPictures(open: () -> InputStream?): Boolean {
@@ -111,14 +109,33 @@ class ImageViewerActivity : AppCompatActivity() {
         }
         return false
     }
+
+    /** One page per picture; the pager is what makes a slideshow swipe. */
+    private class Pages(private val urls: List<String>) : RecyclerView.Adapter<Pages.Page>() {
+
+        class Page(val image: ImageView) : RecyclerView.ViewHolder(image)
+
+        override fun onCreateViewHolder(parent: ViewGroup, type: Int): Page {
+            val image = ImageView(parent.context).apply {
+                layoutParams = ViewGroup.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT
+                )
+                scaleType = ImageView.ScaleType.FIT_CENTER
+                setBackgroundColor(Color.BLACK)
+            }
+            return Page(image)
+        }
+
+        override fun getItemCount() = urls.size
+
+        override fun onBindViewHolder(holder: Page, position: Int) {
+            holder.image.load(urls[position])
+        }
+    }
 }
 
 object ViewerQueue {
-    /** A picture already on the phone. */
-    var uri: Uri? = null
-
-    /** A picture that is still online — a photo post opened straight from the listing. */
-    var remote: String = ""
+    /** Everything the viewer should show; one entry for a comment picture, many for a slideshow. */
+    var urls: List<String> = emptyList()
     var title: String = ""
-    var count: Int = 1
 }

@@ -186,6 +186,14 @@ The lag came from two habits: a new grid adapter per refresh (every resume, ever
 thumbnail cache holds 200 frames on three threads, photos are covered by Coil instead of a frame
 seek, and typing in Explore waits 250 ms before filtering.
 
+### 2026-10-29 — what a photo post really is
+A real link was resolved on this machine: `vm.tiktok.com/ZSgtU15Pr` → `@mrh.6155/photo/7627413399084846356`,
+and the reader answered with fourteen pictures, no duration, no size — and a `play` field holding the
+**music track**. So "has a play address" cannot mean "is a video"; a clip is a slideshow when it
+carries pictures, and the audio is dropped. `/photo/<id>` is parsed beside `/video/<id>`, and the
+reader is asked about the page that was actually pasted. The picture viewer became a pager, so a
+fourteen-picture post swipes like the app it comes from; Save copies whichever page is showing.
+
 ## Measured, from a real request (2026-10-20)
 
 `https://www.tikwm.com/api/?url=<video>&hd=1` → 200, 7.2 KB, 2.1 s: `duration`, `size`, `hd_size`,

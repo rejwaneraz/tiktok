@@ -12,15 +12,21 @@ object SingleClip {
 
     private const val BASE = "https://www.tikwm.com/api/"
 
-    fun clip(context: Context, videoId: String): Clip? {
+    fun clip(context: Context, videoId: String, pageUrl: String = ""): Clip? {
         if (videoId.isBlank()) return null
-        val page = "https://www.tiktok.com/@v/video/$videoId"
+        // The link we were given knows whether this is a /photo/ or a /video/ post; guessing costs a
+        // failed lookup. "v" is the anonymous form the reader accepts for anything.
+        val page = pageUrl.takeIf { it.contains("/photo/") || it.contains("/video/") }
+            ?: "https://www.tiktok.com/@v/video/$videoId"
         val data = runCatching {
             JSONObject(Http.openGet("$BASE?url=$page&hd=1")).optJSONObject("data")
         }.getOrNull() ?: return null
-        val play = data.optString("hdplay").ifBlank { data.optString("play") }.ifBlank { data.optString("wmplay") }
-        // A photo post has no video at all; its pictures are the content, so it is still a clip.
         val images = imagesOf(data.opt("images"))
+        // A photo post still ships its music as `play`; the pictures are what it is, so the audio is
+        // dropped and the post is treated as a slideshow.
+        val photo = images.isNotEmpty()
+        val play = if (photo) "" else data.optString("hdplay")
+            .ifBlank { data.optString("play") }.ifBlank { data.optString("wmplay") }
         if (play.isBlank() && images.isEmpty()) return null
         val author = data.optJSONObject("author") ?: JSONObject()
         val user = author.optString("unique_id")
@@ -44,10 +50,11 @@ object SingleClip {
                 sound = music.optString("title"),
                 soundAuthor = music.optString("authorName")
             ),
-            bytes = data.optLong("hd_size").takeIf { it > 0 } ?: data.optLong("size"),
-            thumb = data.optString("origin_cover").ifBlank { data.optString("cover") },
+            bytes = if (photo) 0L else (data.optLong("hd_size").takeIf { it > 0 } ?: data.optLong("size")),
+            thumb = data.optString("origin_cover").ifBlank { data.optString("cover") }
+                .ifBlank { images.firstOrNull().orEmpty() },
             play = play,
-            page = if (user.isBlank()) page else "https://www.tiktok.com/@$user/video/$videoId",
+            page = page,
             author = user,
             images = images
         )

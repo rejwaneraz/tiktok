@@ -20,7 +20,8 @@ data class Clip(
     /** A photo (slideshow) post carries pictures instead of a video. */
     val images: List<String> = emptyList()
 ) {
-    val isPhoto: Boolean get() = play.isBlank() && images.isNotEmpty()
+    // A photo post still ships a music track as play; the pictures are what it is.
+    val isPhoto: Boolean get() = images.isNotEmpty()
 }
 
 /** clips + the link the user typed, with any short link already expanded. match is set when a
@@ -150,17 +151,18 @@ object TikTokApi {
             val author = item.optJSONObject("author") ?: JSONObject()
             Authors.captureItem(context, author)
             val images = imagesOf(item)
+            val photo = images.isNotEmpty()
             Clip(
                 id = item.optString("id"),
                 title = item.optString("desc").trim(),
-                duration = video.optInt("duration", item.optInt("duration")),
+                duration = if (photo) 0 else video.optInt("duration", item.optInt("duration")),
                 stat = statOf(item),
-                bytes = video.optLong("size").takeIf { it > 0 }
-                    ?: video.optJSONArray("bitrateInfo")?.optJSONObject(0)?.optJSONObject("PlayAddr")?.optLong("DataSize") ?: 0L,
+                bytes = if (photo) 0L else (video.optLong("size").takeIf { it > 0 }
+                    ?: video.optJSONArray("bitrateInfo")?.optJSONObject(0)?.optJSONObject("PlayAddr")?.optLong("DataSize") ?: 0L),
                 // A photo post has no cover; its first picture is the tile.
                 thumb = urlOf(video.opt("cover")).ifBlank { urlOf(video.opt("originCover")) }
                     .ifBlank { images.firstOrNull().orEmpty() },
-                play = bestSource(video).ifBlank { urlOf(video.opt("downloadAddr")) },
+                play = if (photo) "" else bestSource(video).ifBlank { urlOf(video.opt("downloadAddr")) },
                 page = "https://www.tiktok.com/@$user/video/${item.optString("id")}",
                 author = author.optString("uniqueId").ifBlank { user },
                 images = images
@@ -254,12 +256,13 @@ object TikTokApi {
         val user = username(source)
         if (user.isBlank()) throw RuntimeException("username not found")
 
-        val wantedId = Regex("/video/(\\d+)").find(source)?.groupValues?.get(1)
+        // A photo post lives at /photo/<id>, a video at /video/<id>; both name one post.
+        val wantedId = Regex("/(?:video|photo)/(\\d+)").find(source)?.groupValues?.get(1)
 
         // A link that names one video is answered as that one video — no profile read, no author
         // shelf, nothing else in the grid. The reader returns it over plain HTTP in about a second.
         if (wantedId != null) {
-            val one = runCatching { SingleClip.clip(context, wantedId) }.getOrNull()
+            val one = runCatching { SingleClip.clip(context, wantedId, source) }.getOrNull()
             if (one != null) {
                 Log.d(TAG, "single clip $wantedId resolved without a profile read")
                 return@withContext Listing(listOf(one), source, one, 1)
@@ -270,7 +273,7 @@ object TikTokApi {
         if (uid.isBlank()) {
             // The profile page is the only thing TikTok's browser check guards, so a link that names
             // one video can still be answered over plain HTTP instead of giving up.
-            val one = wantedId?.let { SingleClip.clip(context, it) }
+            val one = wantedId?.let { SingleClip.clip(context, it, source) }
             if (one != null) return@withContext Listing(listOf(one), source, one, 1)
             throw RuntimeException("@$user — TikTok would not open the profile page. Check the name " +
                 "is public, or log in again from Settings.")
@@ -318,7 +321,7 @@ object TikTokApi {
         }
         if (wantedId != null) {
             // Older clips sit past what we searched; the reader answers them by id without a search.
-            val one = SingleClip.clip(context, wantedId)
+            val one = SingleClip.clip(context, wantedId, source)
             if (one != null) return@withContext Listing(listOf(one), source, one, pages)
         }
         if (out.isEmpty()) {
