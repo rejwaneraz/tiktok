@@ -228,6 +228,17 @@ object TikTokApi {
         if (user.isBlank()) throw RuntimeException("username not found")
 
         val wantedId = Regex("/video/(\\d+)").find(source)?.groupValues?.get(1)
+
+        // A link that names one video is answered as that one video — no profile read, no author
+        // shelf, nothing else in the grid. The reader returns it over plain HTTP in about a second.
+        if (wantedId != null) {
+            val one = runCatching { SingleClip.clip(context, wantedId) }.getOrNull()
+            if (one != null) {
+                Log.d(TAG, "single clip $wantedId resolved without a profile read")
+                return@withContext Listing(listOf(one), source, one, 1)
+            }
+        }
+
         val uid = runCatching { secUid(context, web, user) }.getOrNull().orEmpty()
         if (uid.isBlank()) {
             // The profile page is the only thing TikTok's browser check guards, so a link that names

@@ -481,32 +481,19 @@ class OfflineActivity : AppCompatActivity(), OfflineAdapter.Listener {
      * becomes a chip when at least two clips carry it — one clip is not a category.
      */
     /**
-     * Hand-made tags first, then the guessed ones — a person's label beats a caption's word.
+     * A clip belongs to whatever collections the user put it in — nothing is guessed from a caption
+     * any more. One clip can sit in as many collections as it deserves.
      */
-    private fun labelsOf(video: LocalVideo): List<String> {
-        val key = ClipTags.key(video.clipId, video.name)
-        val mine = ClipTags.of(this, key)
-        val guessed = Tags.of(video, ClipStats.of(this, video.clipId))
-        return mine + guessed.filterNot { it in mine }
-    }
+    private fun labelsOf(video: LocalVideo): List<String> =
+        ClipTags.of(this, ClipTags.key(video.clipId, video.name))
 
-    private fun tagCounts(): List<Pair<String, Int>> {
-        val counts = HashMap<String, Int>()
-        val handMade = HashSet<String>()
-        videos.forEach { video ->
-            // A tag the user typed is deliberate, so it may appear with a single clip; a guessed one
-            // needs at least two before it deserves to be called a category.
-            handMade.addAll(ClipTags.of(this, ClipTags.key(video.clipId, video.name)))
-            labelsOf(video).forEach { label ->
-                counts[label] = (counts[label] ?: 0) + 1
-            }
-        }
-        return counts.entries
-            .filter { it.value >= 2 || it.key in handMade }
-            .sortedByDescending { it.value }
+    /** Collections are made by hand, so even one clip is a real chip here. */
+    private fun tagCounts(): List<Pair<String, Int>> =
+        ClipTags.known(this)
+            .map { name -> name to videos.count { video -> name in labelsOf(video) } }
+            .filter { it.second > 0 }
+            .sortedByDescending { it.second }
             .take(8)
-            .map { it.key to it.value }
-    }
 
     private fun buildTagChips() {
         exploreTags.removeAllViews()

@@ -16,6 +16,22 @@
         android:scaleType="fitCenter" />
 
     <TextView
+        android:id="@+id/viewerSave"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top|end"
+        android:layout_margin="16dp"
+        android:background="@drawable/btn_outline"
+        android:paddingStart="14dp"
+        android:paddingTop="8dp"
+        android:paddingEnd="14dp"
+        android:paddingBottom="8dp"
+        android:text="Save"
+        android:textColor="@color/on_video"
+        android:textSize="13sp"
+        android:textStyle="bold" />
+
+    <TextView
         android:id="@+id/viewerName"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"

@@ -163,6 +163,17 @@ frame lands in. Settings → Export frames writes one 480 px JPEG per clip under
 `Backup/frames/<tag>/`, skipping what is already there and stopping on demand; the folders are the
 labelled training set, and nothing leaves the phone until the user copies them out.
 
+### 2026-10-29 — collections are made by hand, and the queue outlives the screen
+The word-table tags and the whole ML detour are gone: a person marks what a clip is. Library → "+ Collection"
+names one, the grid goes into tick mode, and "Add" puts every ticked clip into it at once. A clip can
+sit in as many collections as it deserves, and Explore's chips are exactly those collections — nothing
+is guessed from a caption any more. The first frame of a clip is still exportable, so a model can be
+tried later without the app committing to one.
+
+A pasted video link now resolves to that one video through the reader, with no profile read and no
+author shelf. And the download loop moved out of the activity into a queue with its own scope: the
+screen may close, the batch keeps going, the notification keeps counting.
+
 ## Measured, from a real request (2026-10-20)
 
 `https://www.tikwm.com/api/?url=<video>&hd=1` → 200, 7.2 KB, 2.1 s: `duration`, `size`, `hd_size`,

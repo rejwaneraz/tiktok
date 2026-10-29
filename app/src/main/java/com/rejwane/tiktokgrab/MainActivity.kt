@@ -52,12 +52,18 @@ class MainActivity : AppCompatActivity() {
     private var exportTask: Job? = null
     private var commentDone = 0
     private var commentTotal = 0
-    private var lastPercent = -1
     private var section = LIST
-    private val failed = ArrayList<Clip>()
+
+    /** True while the queue reported itself running, so the grid is refreshed once when it ends. */
+    private var downloadsWereRunning = false
 
     /** The last folder read, so Settings and the library do not each scan the disk again. */
     private var libraryCache: List<LocalVideo> = emptyList()
+
+    /** Library multi-select while a collection is being filled. */
+    private var collectionMode = false
+    private var collectionName = ""
+    private val collectionKeys = HashSet<String>()
 
 
     private val countValues by lazy { resources.getIntArray(R.array.count_values) }
@@ -85,6 +91,10 @@ class MainActivity : AppCompatActivity() {
         libraryList = findViewById(R.id.library)
         libraryPane = findViewById(R.id.libraryPane)
         findViewById<TextView>(R.id.librarySort).setOnClickListener { pickLibraryOrder() }
+        // A collection is built by hand: name it once, tick the clips, add them together.
+        findViewById<TextView>(R.id.libraryNew).setOnClickListener { newCollection() }
+        findViewById<Button>(R.id.libraryAdd).setOnClickListener { addToCollection() }
+        findViewById<Button>(R.id.libraryCancel).setOnClickListener { stopCollection() }
         settingsList = findViewById(R.id.settings)
 
         adapter = GridAdapter(onOpen = { openPlayer(it) }, onSelectionChanged = { showSelection() })
@@ -133,9 +143,9 @@ class MainActivity : AppCompatActivity() {
         }
         findViewById<Button>(R.id.exitSelect).setOnClickListener { adapter.exitSelect() }
         downloadBtn.setOnClickListener {
-            if (task?.isActive == true) task?.cancel() else startDownloads(adapter.selectedClips())
+            if (Downloads.isRunning()) Downloads.stop() else startDownloads(adapter.selectedClips())
         }
-        retryBtn.setOnClickListener { startDownloads(ArrayList(failed)) }
+        retryBtn.setOnClickListener { startDownloads(Downloads.failedClips) }
 
         findViewById<View>(R.id.tabList).setOnClickListener { showSection(LIST) }
         findViewById<View>(R.id.tabLibrary).setOnClickListener { showSection(LIBRARY) }
@@ -210,7 +220,8 @@ class MainActivity : AppCompatActivity() {
             if (bytes > 0) append(" · ~").append(GridAdapter.mb(bytes))
         }
         selectBar.visibility = if (adapter.selectMode) View.VISIBLE else View.GONE
-        val running = task?.isActive == true
+        val running = Downloads.isRunning()
+        val failed = Downloads.failedClips
         downloadBtn.text = if (running) getString(R.string.cancel) else getString(R.string.download)
         downloadBtn.isEnabled = running || adapter.selectedCount() > 0
         retryBtn.visibility = if (failed.isEmpty() || running) View.GONE else View.VISIBLE
@@ -550,16 +561,100 @@ class MainActivity : AppCompatActivity() {
             val saved = sortedForLibrary(LocalVideos.scanOf(this@MainActivity))
             libraryCache = saved
             val profiles = saved.map { it.author }.distinct()
-            libraryList.adapter = LocalGridAdapter(saved, onOpen = { openOffline(it) }, onMenu = { clip ->
-                LocalMenu.show(this@MainActivity, clip, profiles,
-                    onDeleted = { refreshLibrary() }, onMoved = { refreshLibrary() })
-            })
+            libraryList.adapter = LocalGridAdapter(
+                saved,
+                flat = false,
+                selectMode = collectionMode,
+                selected = collectionKeys,
+                onOpen = { openOffline(it) },
+                onMenu = { clip ->
+                    LocalMenu.show(this@MainActivity, clip, profiles,
+                        onDeleted = { refreshLibrary() }, onMoved = { refreshLibrary() })
+                },
+                onToggled = { paintCollectionBar() }
+            )
             findViewById<TextView>(R.id.librarySort).text =
                 "${libraryOrders[libraryOrder().coerceIn(0, libraryOrders.size - 1)]} ▾"
-            statusView.text = if (saved.isEmpty()) getString(R.string.library_empty)
-            else "${saved.size} saved · ${GridAdapter.mb(saved.sumOf { it.bytes })}"
+            if (!collectionMode) {
+                statusView.text = if (saved.isEmpty()) getString(R.string.library_empty)
+                else "${saved.size} saved · ${GridAdapter.mb(saved.sumOf { it.bytes })}"
+            }
         }
     }
+
+    // region collections
+
+    /** "+ Collection": pick an existing one or name a new one, then tick clips in the grid. */
+    private fun newCollection() {
+        val known = ClipTags.known(this)
+        if (known.isEmpty()) {
+            askCollectionName()
+            return
+        }
+        val labels = (known + "New collection…").toTypedArray()
+        MaterialAlertDialogBuilder(this)
+            .setTitle("Add to which collection?")
+            .setItems(labels) { _, which ->
+                if (which == labels.lastIndex) askCollectionName() else beginCollection(labels[which])
+            }
+            .show()
+    }
+
+    private fun askCollectionName() {
+        val input = EditText(this).apply {
+            hint = "e.g. School"
+            setSingleLine()
+            setPadding(48, 32, 48, 32)
+        }
+        MaterialAlertDialogBuilder(this)
+            .setTitle("New collection")
+            .setView(input)
+            .setPositiveButton("Start") { _, _ ->
+                val name = input.text.toString().trim()
+                if (name.isNotBlank()) beginCollection(name)
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun beginCollection(name: String) {
+        collectionName = name
+        collectionMode = true
+        collectionKeys.clear()
+        findViewById<View>(R.id.libraryBar).visibility = View.VISIBLE
+        paintCollectionBar()
+        showSection(LIBRARY)
+        refreshLibrary()
+    }
+
+    private fun paintCollectionBar() {
+        findViewById<TextView>(R.id.libraryBarText).text =
+            "${collectionKeys.size} selected → $collectionName"
+        findViewById<Button>(R.id.libraryAdd).isEnabled = collectionKeys.isNotEmpty()
+    }
+
+    private fun addToCollection() {
+        if (collectionKeys.isEmpty()) return
+        val count = collectionKeys.size
+        val name = collectionName
+        ClipTags.addAll(this, collectionKeys.toList(), name)
+        stopCollection()
+        note("Added to $name", lines(
+            "$count clips are in \"$name\".",
+            "",
+            "Offline → Explore shows it as a chip; one clip can sit in several collections."
+        ))
+    }
+
+    private fun stopCollection() {
+        collectionMode = false
+        collectionName = ""
+        collectionKeys.clear()
+        findViewById<View>(R.id.libraryBar).visibility = View.GONE
+        refreshLibrary()
+    }
+
+    // endregion
 
     private val libraryOrders = arrayOf("Newest first", "Largest first", "Most played", "Random")
 
@@ -719,54 +814,36 @@ class MainActivity : AppCompatActivity() {
             askForAccess()
             return
         }
-        failed.clear()
-        loadBtn.isEnabled = false
-        lastPercent = -1
-        // Pins the process and shows the bar outside the app; it can never break the loop itself.
-        DownloadService.start(this, clips.size)
+        showSelection()
+        // The queue lives in its own scope: this screen may go away, the batch does not.
+        Downloads.start(this, clips)
+    }
 
-        task = lifecycleScope.launch {
-            showSelection()
-            var finished = 0
-            try {
-                for (clip in clips) {
-                    try {
-                        val result = Downloader.save(this@MainActivity, clip) { percent ->
-                            val whole = percent.toInt()
-                            if (whole != lastPercent) {
-                                lastPercent = whole
-                                runOnUiThread {
-                                    progress.progress = whole
-                                    statusView.text = "${finished + 1}/${clips.size} · $whole%"
-                                    DownloadService.progress(this@MainActivity, finished, clips.size)
-                                }
-                            }
-                        }
-                        adapter.markSaved(result.clipId)
-                        if (!result.skipped) {
-                            progress.progress = 100
-                            statusView.text = "Saved → ${result.path}"
-                        }
-                    } catch (e: CancellationException) {
-                        throw e
-                    } catch (e: Exception) {
-                        failed.add(clip)
-                        statusView.text = "Failed: ${e.message}"
-                    }
-                    finished++
-                }
-                statusView.text = getString(R.string.done, finished - failed.size, clips.size) +
-                        if (failed.isEmpty()) "" else " · ${failed.size}"
-            } catch (e: CancellationException) {
-                statusView.text = "Stopped · $finished/${clips.size} done"
-                throw e
-            } finally {
-                DownloadService.stop(this@MainActivity)
-                loadBtn.isEnabled = true
-                showSelection()
-                if (section == LIBRARY) refreshLibrary()
-            }
+    /**
+     * The queue's report. It may arrive while this screen is alive, after it came back, or not at
+     * all — none of that stops the download, it only decides what is painted.
+     */
+    private fun paintDownloads(state: Downloads.State) {
+        progress.progress = when {
+            state.running -> state.percent
+            state.total > 0 -> 100
+            else -> 0
         }
+        downloadBtn.text = if (state.running) getString(R.string.cancel) else getString(R.string.download)
+        downloadBtn.isEnabled = state.running || adapter.selectedCount() > 0
+        loadBtn.isEnabled = !state.running
+        retryBtn.visibility =
+            if (!state.running && Downloads.failedClips.isNotEmpty()) View.VISIBLE else View.GONE
+        retryBtn.text = "Retry (${Downloads.failedClips.size})"
+        if (state.savedId.isNotBlank()) adapter.markSaved(state.savedId)
+        if (state.running) {
+            statusView.text = "${state.done + 1}/${state.total} · ${state.current} · ${state.percent}%"
+        } else if (state.total > 0) {
+            statusView.text = getString(R.string.done, state.done - state.failed, state.total) +
+                if (state.failed == 0) "" else " · ${state.failed} failed"
+            if (!downloadsWereRunning && section == LIBRARY) refreshLibrary()
+        }
+        downloadsWereRunning = state.running
     }
 
     override fun onResume() {
@@ -780,6 +857,8 @@ class MainActivity : AppCompatActivity() {
         if (!Vault.granted(this)) {
             statusView.text = "All files access is still off — tap All files access in Settings"
         }
+        // The queue may have kept working while this screen was away.
+        Downloads.watch { paintDownloads(it) }
     }
 
     companion object {
@@ -792,6 +871,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onPause() {
+        // The queue keeps running after this; only the reporting stops.
+        Downloads.watch(null)
         Backup.snapshot(this)
         super.onPause()
     }

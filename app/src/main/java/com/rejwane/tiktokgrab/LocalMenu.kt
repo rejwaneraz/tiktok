@@ -14,7 +14,7 @@ object LocalMenu {
     fun show(host: AppCompatActivity, clip: LocalVideo, profiles: List<String>,
              onDeleted: () -> Unit, onMoved: () -> Unit) {
         val labels = arrayOf("Delete", "Share", "Play in another app", "Open on TikTok",
-            "Copy file name", "Move to profile", "Tags…")
+            "Copy file name", "Move to profile", "Collections…")
         MaterialAlertDialogBuilder(host)
             .setTitle(clip.caption.ifBlank { clip.name })
             .setItems(labels) { _, which ->
@@ -47,7 +47,7 @@ object LocalMenu {
         // No setMessage here: a message and a list cannot share this dialog (the message wins and
         // the checkboxes never appear, which is exactly what broke the List order picker).
         MaterialAlertDialogBuilder(host)
-            .setTitle("Tags for this clip")
+            .setTitle("Collections for this clip")
             .setMultiChoiceItems(known.toTypedArray(), checked) { _, which, isChecked ->
                 if (isChecked) current.add(known[which]) else current.remove(known[which])
             }
@@ -55,19 +55,19 @@ object LocalMenu {
                 ClipTags.set(host, key, current.toList())
                 onChanged()
             }
-            .setNeutralButton("New tag") { _, _ -> newTag(host, key, onChanged) }
+            .setNeutralButton("New collection") { _, _ -> newTag(host, key, onChanged) }
             .setNegativeButton("Cancel", null)
             .show()
     }
 
     private fun newTag(host: AppCompatActivity, key: String, onChanged: () -> Unit) {
         val input = android.widget.EditText(host).apply {
-            hint = "e.g. Lehenga"
+            hint = "e.g. School"
             setSingleLine()
             setPadding(48, 32, 48, 32)
         }
         MaterialAlertDialogBuilder(host)
-            .setTitle("New tag")
+            .setTitle("New collection")
             .setView(input)
             .setPositiveButton("Add") { _, _ ->
                 val name = input.text.toString().trim()

@@ -166,12 +166,14 @@ class GridAdapter(
         holder.playsBadge.text = if (clip.stat.plays > 0) "▶ ${short(clip.stat.plays)}" else "▶ —"
         holder.playsBadge.visibility = View.VISIBLE
         holder.root.setOnClickListener {
+            // `position` is captured at bind time: bindingAdapterPosition turns -1 once the holder is
+            // recycled, and a tap that lands in that window used to do nothing at all.
             if (selectMode) {
                 if (!selected.add(clip.id)) selected.remove(clip.id)
-                notifyItemChanged(holder.bindingAdapterPosition)
+                notifyItemChanged(position)
                 onSelectionChanged()
             } else {
-                onOpen(holder.bindingAdapterPosition)
+                onOpen(position)
             }
         }
         holder.root.setOnLongClickListener {
