@@ -65,6 +65,9 @@ class MainActivity : AppCompatActivity() {
     private var collectionName = ""
     private val collectionKeys = HashSet<String>()
 
+    /** Built once: replacing the adapter on every refresh is what made a big library stutter. */
+    private lateinit var libraryAdapter: LocalGridAdapter
+
 
     private val countValues by lazy { resources.getIntArray(R.array.count_values) }
 
@@ -90,6 +93,19 @@ class MainActivity : AppCompatActivity() {
         grid = findViewById(R.id.grid)
         libraryList = findViewById(R.id.library)
         libraryPane = findViewById(R.id.libraryPane)
+        libraryAdapter = LocalGridAdapter(
+            emptyList(),
+            flat = false,
+            selected = collectionKeys,
+            onOpen = { openOffline(it) },
+            onMenu = { clip ->
+                val profiles = libraryCache.map { it.author }.distinct()
+                LocalMenu.show(this, clip, profiles,
+                    onDeleted = { refreshLibrary() }, onMoved = { refreshLibrary() })
+            },
+            onToggled = { paintCollectionBar() }
+        )
+        libraryList.adapter = libraryAdapter
         findViewById<TextView>(R.id.librarySort).setOnClickListener { pickLibraryOrder() }
         // A collection is built by hand: name it once, tick the clips, add them together.
         findViewById<TextView>(R.id.libraryNew).setOnClickListener { newCollection() }
@@ -560,19 +576,8 @@ class MainActivity : AppCompatActivity() {
         lifecycleScope.launch {
             val saved = sortedForLibrary(LocalVideos.scanOf(this@MainActivity))
             libraryCache = saved
-            val profiles = saved.map { it.author }.distinct()
-            libraryList.adapter = LocalGridAdapter(
-                saved,
-                flat = false,
-                selectMode = collectionMode,
-                selected = collectionKeys,
-                onOpen = { openOffline(it) },
-                onMenu = { clip ->
-                    LocalMenu.show(this@MainActivity, clip, profiles,
-                        onDeleted = { refreshLibrary() }, onMoved = { refreshLibrary() })
-                },
-                onToggled = { paintCollectionBar() }
-            )
+            libraryAdapter.selectMode = collectionMode
+            libraryAdapter.submit(saved)
             findViewById<TextView>(R.id.librarySort).text =
                 "${libraryOrders[libraryOrder().coerceIn(0, libraryOrders.size - 1)]} ▾"
             if (!collectionMode) {
@@ -797,6 +802,11 @@ class MainActivity : AppCompatActivity() {
 
     private fun openPlayer(position: Int) {
         val clip = adapter.clipAt(position) ?: return
+        if (clip.isPhoto) {
+            statusView.text = "Photo post — saving ${clip.images.size} pictures"
+            startDownloads(listOf(clip))
+            return
+        }
         if (clip.play.isBlank()) {
             statusView.text = "Not a video (maybe a photo post)"
             return

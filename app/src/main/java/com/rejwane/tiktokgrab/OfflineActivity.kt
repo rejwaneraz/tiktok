@@ -78,6 +78,32 @@ class OfflineActivity : AppCompatActivity(), OfflineAdapter.Listener {
     private val profileRoot by lazy { findViewById<View>(R.id.profileRoot) }
     private val profileGrid by lazy { findViewById<RecyclerView>(R.id.profileGrid) }
 
+    /** One adapter per grid, reused — rebuilding it on every keystroke and resume is what dragged. */
+    private val exploreAdapter by lazy {
+        LocalGridAdapter(
+            emptyList(), flat = true,
+            onOpen = { video ->
+                val list = exploreAdapter.snapshot()
+                show(list, list.indexOfFirst { it.uri == video.uri })
+            },
+            onMenu = { ask(it) }
+        )
+    }
+    private val profileAdapter by lazy {
+        LocalGridAdapter(
+            emptyList(), flat = true,
+            onOpen = { video ->
+                val list = profileAdapter.snapshot()
+                show(list, list.indexOfFirst { it.uri == video.uri })
+            },
+            onMenu = { ask(it) }
+        )
+    }
+
+    /** Typing in Explore waits a moment, so a long library is filtered once instead of per letter. */
+    private val searchTick = Handler(Looper.getMainLooper())
+    private val searchRun = Runnable { fillExplore() }
+
     private val pulse = object : Runnable {
         override fun run() {
             adapter?.tick(position)
@@ -128,7 +154,10 @@ class OfflineActivity : AppCompatActivity(), OfflineAdapter.Listener {
         exploreQuery.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) = Unit
             override fun onTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) = Unit
-            override fun afterTextChanged(s: Editable?) = fillExplore()
+            override fun afterTextChanged(s: Editable?) {
+                searchTick.removeCallbacks(searchRun)
+                searchTick.postDelayed(searchRun, 250)
+            }
         })
         buildChips()
 
@@ -549,10 +578,8 @@ class OfflineActivity : AppCompatActivity(), OfflineAdapter.Listener {
     private fun fillExplore() {
         if (section != EXPLORE) return
         buildTagChips()
-        val list = exploreList()
-        exploreGrid.adapter = LocalGridAdapter(list, flat = true,
-            onOpen = { show(list, list.indexOf(it)) },
-            onMenu = { ask(it) })
+        exploreAdapter.submit(exploreList())
+        if (exploreGrid.adapter !== exploreAdapter) exploreGrid.adapter = exploreAdapter
     }
 
     // endregion
@@ -700,10 +727,8 @@ class OfflineActivity : AppCompatActivity(), OfflineAdapter.Listener {
 
     private fun fillGrid() {
         if (opened == null) return
-        val list = profileList()
-        profileGrid.adapter = LocalGridAdapter(list, flat = true,
-            onOpen = { show(list, list.indexOf(it)) },
-            onMenu = { ask(it) })
+        profileAdapter.submit(profileList())
+        if (profileGrid.adapter !== profileAdapter) profileGrid.adapter = profileAdapter
     }
 
     // endregion

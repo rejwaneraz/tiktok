@@ -118,6 +118,12 @@ class PlayerAdapter(
             }
             share.setOnClickListener { owner.onShare(clip) }
 
+            // A photo post in the same list has no stream; it is shown as a caption, not a crash.
+            if (clip.play.isBlank()) {
+                pauseIcon.visibility = View.GONE
+                meta.text = "Photo post — open it from the library"
+                return
+            }
             video.setOnPreparedListener { player ->
                 ready = true
                 player.isLooping = true

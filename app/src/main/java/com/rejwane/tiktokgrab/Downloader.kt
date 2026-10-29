@@ -71,8 +71,11 @@ object Downloader {
 
     /** The first hit sometimes fails until TikTok hands back a fresh msToken, so retry once. */
     suspend fun save(context: Context, clip: Clip, onPercent: (Float) -> Unit): Saved {
-        if (clip.play.isBlank()) throw RuntimeException("no video link")
+        if (clip.play.isBlank() && clip.images.isEmpty()) throw RuntimeException("no video link")
         if (clip.id in doneIds(context)) return Saved(clip.id, "", "", 0L, true)
+
+        // A photo (slideshow) post has no video: its pictures are the download.
+        if (clip.play.isBlank()) return savePhotos(context, clip, onPercent)
 
         var failure: Exception? = null
         repeat(2) { tryAgain ->
@@ -86,6 +89,43 @@ object Downloader {
             }
         }
         throw failure ?: RuntimeException("download failed")
+    }
+
+    /**
+     * Every picture of a photo post, numbered, in the same library folder as the videos. Each file
+     * carries the clip id, so the app can show them as one post and a reinstall still knows whose
+     * they are.
+     */
+    private suspend fun savePhotos(context: Context, clip: Clip,
+                                   onPercent: (Float) -> Unit): Saved = withContext(Dispatchers.IO) {
+        if (!Vault.granted(context)) {
+            throw RuntimeException("All files access is off - turn it on in Settings")
+        }
+        var first = ""
+        var total = 0L
+        clip.images.forEachIndexed { index, url ->
+            coroutineContext.ensureActive()
+            val target = Vault.photoFile(context, clip.title, clip.id, index + 1, clip.images.size)
+            if (!target.isFile || target.length() == 0L) {
+                val request = Request.Builder().url(url)
+                    .header("User-Agent", UA)
+                    .header("Referer", "https://www.tiktok.com/")
+                    .build()
+                client.newCall(request).execute().use { response ->
+                    if (!response.isSuccessful) throw RuntimeException("HTTP ${response.code}")
+                    val body = response.body ?: throw RuntimeException("empty picture")
+                    target.outputStream().use { out ->
+                        body.byteStream().use { input -> input.copyTo(out) }
+                    }
+                }
+            }
+            if (index == 0) first = target.absolutePath
+            total += target.length()
+            onPercent(((index + 1) * 100f) / clip.images.size)
+        }
+        Vault.record(context, clip.id, clip.author, clip.title)
+        prefs(context).edit().putStringSet("ids", doneIds(context) + clip.id).apply()
+        Saved(clip.id, first, Uri.fromFile(File(first)).toString(), total, false)
     }
 
     private suspend fun attempt(context: Context, clip: Clip, name: String,

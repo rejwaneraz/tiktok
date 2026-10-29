@@ -13,6 +13,7 @@ import android.provider.MediaStore
 import android.util.LruCache
 import android.util.Size
 import android.widget.ImageView
+import coil.load
 import android.widget.TextView
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -37,7 +38,8 @@ data class LocalVideo(
     val author: String,
     val bytes: Long,
     val durationMs: Long,
-    val addedAt: Long
+    val addedAt: Long,
+    val isPhoto: Boolean = false
 ) {
     val key: String get() = uri.toString()
 
@@ -64,6 +66,12 @@ object LocalVideos {
 
     fun sanitize(name: String) =
         name.filterNot { ILLEGAL.contains(it) }.trim().trim('.').ifBlank { UNASSIGNED }
+
+    /** True for a picture saved from a photo post, which is shown instead of a video. */
+    fun isPicture(name: String) =
+        name.endsWith(".jpg${Vault.EXT}", true) ||
+            name.endsWith(".png${Vault.EXT}", true) ||
+            name.endsWith(".webp${Vault.EXT}", true)
 
     /**
      * Listing the folder costs disk reads and a MediaStore query, so it never runs on the thread that
@@ -105,7 +113,10 @@ object LocalVideos {
                 author = Vault.authorOf(context, clipId.ifBlank { "file:" + file.name }, ""),
                 bytes = file.length(),
                 durationMs = 0L,
-                addedAt = file.lastModified() / 1000
+                addedAt = file.lastModified() / 1000,
+                // A picture of a photo post lives in the same folder and keeps the same name shape;
+                // the extension is what tells the two apart.
+                isPhoto = isPicture(file.name)
             )
         }
     }
@@ -236,12 +247,18 @@ object LocalVideos {
 /** A frame taken out of the file itself, so the grid also works with the network off. */
 object LocalThumbs {
 
-    private val cache = LruCache<String, Bitmap>(30)
+    private val cache = LruCache<String, Bitmap>(200)
     private val durations = ConcurrentHashMap<String, Int>()
-    private val pool = Executors.newFixedThreadPool(2)
+    private val pool = Executors.newFixedThreadPool(3)
 
     /** Reading the file once gives both the cover frame and the length MediaStore withholds. */
     fun into(cover: ImageView, badge: TextView?, video: LocalVideo, context: Context) {
+        if (video.isPhoto) {
+            // A picture is already a picture: no frame to seek, no duration to read.
+            cover.load(video.uri) { crossfade(false) }
+            badge?.text = ""
+            return
+        }
         val views = video.badge(context)
         val cached = synchronized(cache) { cache.get(video.key) }
         if (cached != null) {

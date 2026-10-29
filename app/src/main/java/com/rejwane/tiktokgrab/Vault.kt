@@ -74,6 +74,16 @@ object Vault {
         return folder
     }
 
+    /**
+     * One picture of a photo post: same folder, same clip id, a "p<i>" suffix so a set of images
+     * stays together and still reads as one clip.
+     */
+    fun photoFile(context: Context, caption: String, clipId: String, index: Int, count: Int): File {
+        val title = LocalVideos.sanitize(caption).take(48).ifBlank { "photo" }
+        val suffix = if (count > 1) " p$index" else ""
+        return File(dir(context), "$title [$clipId]$suffix.jpg$EXT")
+    }
+
     /** A file nobody will mistake for a video, and never the one that is already there. */
     fun file(context: Context, caption: String, clipId: String): File {
         val base = "${LocalVideos.sanitize(caption).take(60)} [$clipId]$EXT"

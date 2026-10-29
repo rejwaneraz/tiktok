@@ -174,6 +174,18 @@ A pasted video link now resolves to that one video through the reader, with no p
 author shelf. And the download loop moved out of the activity into a queue with its own scope: the
 screen may close, the batch keeps going, the notification keeps counting.
 
+### 2026-10-29 — photo posts, and grids that are built once
+A photo (slideshow) post now downloads as numbered pictures into the same library folder —
+`<caption> [clipId] p1.jpg.nomedia` — and the feed shows the picture where a video would play: the
+video view hides, an image view takes its place, and tap/pause do nothing on it. The List treats such
+a clip as a download rather than refusing it, and the online player says "photo post" instead of
+trying to stream an empty address.
+
+The lag came from two habits: a new grid adapter per refresh (every resume, every keystroke), and a
+30-entry thumbnail cache on two threads. Both grids are now built once and take a new list, the
+thumbnail cache holds 200 frames on three threads, photos are covered by Coil instead of a frame
+seek, and typing in Explore waits 250 ms before filtering.
+
 ## Measured, from a real request (2026-10-20)
 
 `https://www.tikwm.com/api/?url=<video>&hd=1` → 200, 7.2 KB, 2.1 s: `duration`, `size`, `hd_size`,

@@ -11,6 +11,15 @@
         android:layout_height="match_parent"
         android:layout_gravity="center" />
 
+    <ImageView
+        android:id="@+id/localPhoto"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_gravity="center"
+        android:contentDescription="@null"
+        android:scaleType="centerCrop"
+        android:visibility="gone" />
+
     <TextView
         android:id="@+id/localPause"
         android:layout_width="64dp"

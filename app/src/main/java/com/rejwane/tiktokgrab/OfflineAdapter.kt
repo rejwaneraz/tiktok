@@ -45,6 +45,7 @@ class OfflineAdapter(
 
     class Holder(view: View) : RecyclerView.ViewHolder(view) {
         val video: android.widget.VideoView = view.findViewById(R.id.localVideo)
+        val photo: ImageView = view.findViewById(R.id.localPhoto)
         val pauseIcon: TextView = view.findViewById(R.id.localPause)
         val bar: ProgressBar = view.findViewById(R.id.localBar)
         val author: TextView = view.findViewById(R.id.localAuthor)
@@ -98,6 +99,15 @@ class OfflineAdapter(
             expanded = false
             caption.maxLines = 2
             paintEverything(clip, info, listener, reuse = false)
+            // A photo post has no player: the picture is the whole page.
+            video.visibility = if (clip.isPhoto) View.GONE else View.VISIBLE
+            photo.visibility = if (clip.isPhoto) View.VISIBLE else View.GONE
+            if (clip.isPhoto) {
+                photo.load(clip.uri) { crossfade(false) }
+                ready = true
+                pauseIcon.visibility = View.GONE
+                return
+            }
             video.setOnPreparedListener { mp ->
                 ready = true
                 mp.isLooping = true
@@ -207,6 +217,7 @@ class OfflineAdapter(
 
         fun start() {
             wantsPlay = true
+            if (current?.isPhoto == true) return
             if (ready) {
                 if (!video.isPlaying) video.start()
                 pauseIcon.visibility = View.GONE
@@ -215,15 +226,18 @@ class OfflineAdapter(
 
         fun pause() {
             wantsPlay = false
+            if (current?.isPhoto == true) return
             if (ready && video.isPlaying) video.pause()
             pauseIcon.visibility = View.VISIBLE
         }
 
         fun playOrPause() {
+            if (current?.isPhoto == true) return
             if (ready && video.isPlaying) pause() else start()
         }
 
         fun refreshBar() {
+            if (current?.isPhoto == true) return
             val total = video.duration
             if (ready && total > 0) bar.progress = video.currentPosition * 100 / total
         }

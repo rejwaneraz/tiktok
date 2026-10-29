@@ -12,18 +12,30 @@ import androidx.recyclerview.widget.RecyclerView
  * Saved videos as a grid. `flat` is the TikTok profile look — edge to edge, no card, no author tag —
  * while the Library tab keeps the padded cards because it mixes authors together.
  *
- * In select mode a tile toggles itself instead of opening, which is how a collection is filled: tick
- * a few clips, then add them all at once.
+ * One adapter per grid, reused: rebuilding it on every resume, keystroke or tab switch is what made a
+ * large profile feel heavy and drop taps while it was being replaced.
  */
 class LocalGridAdapter(
-    private val items: List<LocalVideo>,
+    initial: List<LocalVideo>,
     private val flat: Boolean = false,
-    private val selectMode: Boolean = false,
+    var selectMode: Boolean = false,
     private val selected: MutableSet<String> = HashSet(),
     private val onOpen: (LocalVideo) -> Unit,
     private val onMenu: (LocalVideo) -> Unit,
     private val onToggled: () -> Unit = {}
 ) : RecyclerView.Adapter<LocalGridAdapter.Holder>() {
+
+    private val items = ArrayList<LocalVideo>(initial)
+
+    fun submit(list: List<LocalVideo>) {
+        items.clear()
+        items.addAll(list)
+        notifyDataSetChanged()
+    }
+
+    fun snapshot(): List<LocalVideo> = items.toList()
+
+    fun indexOf(video: LocalVideo) = items.indexOfFirst { it.uri == video.uri }
 
     inner class Holder(view: View) : RecyclerView.ViewHolder(view) {
         val root: View = view
@@ -61,13 +73,12 @@ class LocalGridAdapter(
             }
         }
         holder.root.setOnLongClickListener {
-            if (!selectMode) {
-                onMenu(clip)
-                true
-            } else {
+            if (selectMode) {
                 holder.root.performClick()
-                true
+            } else {
+                onMenu(clip)
             }
+            true
         }
     }
 }

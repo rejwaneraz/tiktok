@@ -16,8 +16,12 @@ data class Clip(
     val thumb: String,
     val play: String,
     val page: String,
-    val author: String = ""
-)
+    val author: String = "",
+    /** A photo (slideshow) post carries pictures instead of a video. */
+    val images: List<String> = emptyList()
+) {
+    val isPhoto: Boolean get() = play.isBlank() && images.isNotEmpty()
+}
 
 /** clips + the link the user typed, with any short link already expanded. match is set when a
  *  specific video link was given and found. */
@@ -155,9 +159,29 @@ object TikTokApi {
                 thumb = urlOf(video.opt("cover")).ifBlank { urlOf(video.opt("originCover")) },
                 play = bestSource(video).ifBlank { urlOf(video.opt("downloadAddr")) },
                 page = "https://www.tiktok.com/@$user/video/${item.optString("id")}",
-                author = author.optString("uniqueId").ifBlank { user }
+                author = author.optString("uniqueId").ifBlank { user },
+                images = imagesOf(item)
             )
         }
+    }
+
+    /**
+     * A photo post lists its pictures under `imagePost.images`, each with a display URL. The shapes
+     * differ between responses, so the first non-empty of the known keys wins and an absent post
+     * simply yields nothing.
+     */
+    private fun imagesOf(item: JSONObject): List<String> {
+        val post = item.optJSONObject("imagePost") ?: return emptyList()
+        val arr = post.optJSONArray("images") ?: return emptyList()
+        val out = ArrayList<String>()
+        for (i in 0 until arr.length()) {
+            val image = arr.optJSONObject(i) ?: continue
+            val url = urlOf(image.opt("displayImage"))
+                .ifBlank { urlOf(image.opt("thumbnail")) }
+                .ifBlank { urlOf(image.opt("imageURL")) }
+            if (url.isNotBlank()) out.add(url)
+        }
+        return out
     }
 
     /** Walks the page JSON to the profile owner's own secUid, and refuses another account's id. */
