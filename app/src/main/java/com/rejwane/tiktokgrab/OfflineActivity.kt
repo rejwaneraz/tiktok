@@ -87,7 +87,8 @@ class OfflineActivity : AppCompatActivity(), OfflineAdapter.Listener {
             emptyList(), flat = true,
             onOpen = { video ->
                 val list = exploreAdapter.snapshot()
-                show(list, list.indexOfFirst { it.uri == video.uri })
+                val at = list.indexOfFirst { it.uri == video.uri }
+                if (at >= 0) show(list, at)
             },
             onMenu = { ask(it) }
         )
@@ -97,7 +98,8 @@ class OfflineActivity : AppCompatActivity(), OfflineAdapter.Listener {
             emptyList(), flat = true,
             onOpen = { video ->
                 val list = profileAdapter.snapshot()
-                show(list, list.indexOfFirst { it.uri == video.uri })
+                val at = list.indexOfFirst { it.uri == video.uri }
+                if (at >= 0) show(list, at)
             },
             onMenu = { ask(it) }
         )
@@ -480,6 +482,8 @@ class OfflineActivity : AppCompatActivity(), OfflineAdapter.Listener {
             return
         }
         ViewerQueue.uri = picture
+        ViewerQueue.remote = ""
+        ViewerQueue.count = 1
         ViewerQueue.title = Authors.get(this, author).display(author)
         startActivity(Intent(this, ImageViewerActivity::class.java))
     }
@@ -835,6 +839,7 @@ class OfflineActivity : AppCompatActivity(), OfflineAdapter.Listener {
     }
 
     override fun onDestroy() {
+        searchTick.removeCallbacks(searchRun)
         adapter = null
         super.onDestroy()
     }

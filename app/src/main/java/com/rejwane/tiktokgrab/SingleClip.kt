@@ -19,7 +19,9 @@ object SingleClip {
             JSONObject(Http.openGet("$BASE?url=$page&hd=1")).optJSONObject("data")
         }.getOrNull() ?: return null
         val play = data.optString("hdplay").ifBlank { data.optString("play") }.ifBlank { data.optString("wmplay") }
-        if (play.isBlank()) return null
+        // A photo post has no video at all; its pictures are the content, so it is still a clip.
+        val images = imagesOf(data.opt("images"))
+        if (play.isBlank() && images.isEmpty()) return null
         val author = data.optJSONObject("author") ?: JSONObject()
         val user = author.optString("unique_id")
         if (user.isNotBlank()) runCatching {
@@ -46,7 +48,20 @@ object SingleClip {
             thumb = data.optString("origin_cover").ifBlank { data.optString("cover") },
             play = play,
             page = if (user.isBlank()) page else "https://www.tiktok.com/@$user/video/$videoId",
-            author = user
+            author = user,
+            images = images
         )
     }
+
+    /** The reader lists a photo post as an array of urls, or of objects that carry one. */
+    private fun imagesOf(value: Any?): List<String> = when (value) {
+        is String -> if (value.startsWith("http")) listOf(value) else emptyList()
+        is org.json.JSONArray -> (0 until value.length()).flatMap { imagesOf(value.opt(it)) }
+        is JSONObject -> listOf(
+            value.optString("url"),
+            value.optString("display_image"),
+            value.optString("image_url")
+        ).firstOrNull { it.startsWith("http") }?.let { listOf(it) } ?: emptyList()
+        else -> emptyList()
+    }.distinct()
 }

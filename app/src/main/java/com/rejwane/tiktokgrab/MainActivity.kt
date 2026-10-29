@@ -781,7 +781,7 @@ class MainActivity : AppCompatActivity() {
                 if (result.match != null) {
                     input.setText("@$user")
                     statusView.text = "Found — downloading… @$user"
-                    startDownloads(listOf(result.match!!))
+                    result.match?.let { startDownloads(listOf(it)) }
                 } else {
                     val searched = Regex("/video/(\\d+)").find(result.source) != null
                     statusView.text = "${clips.size} videos — @$user$savedNote" +
@@ -802,9 +802,18 @@ class MainActivity : AppCompatActivity() {
 
     private fun openPlayer(position: Int) {
         val clip = adapter.clipAt(position) ?: return
+        // A photo post previews exactly like a video does: tap opens it, download stays a choice.
         if (clip.isPhoto) {
-            statusView.text = "Photo post — saving ${clip.images.size} pictures"
-            startDownloads(listOf(clip))
+            val first = clip.images.firstOrNull().orEmpty()
+            if (first.isBlank()) {
+                statusView.text = "This photo post has no picture address"
+                return
+            }
+            ViewerQueue.uri = null
+            ViewerQueue.remote = first
+            ViewerQueue.title = clip.title.ifBlank { "Photo post" }
+            ViewerQueue.count = clip.images.size
+            startActivity(Intent(this, ImageViewerActivity::class.java))
             return
         }
         if (clip.play.isBlank()) {

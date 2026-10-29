@@ -145,6 +145,8 @@ class CommentAdapter(
             view.load(uri) { crossfade(false) }
             view.setOnClickListener {
                 ViewerQueue.uri = uri
+                    ViewerQueue.remote = ""
+                    ViewerQueue.count = 1
                 ViewerQueue.title = comment.name
                 context.startActivity(Intent(context, ImageViewerActivity::class.java))
             }

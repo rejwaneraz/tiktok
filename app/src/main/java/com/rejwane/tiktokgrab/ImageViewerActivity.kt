@@ -17,45 +17,80 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.io.InputStream
 
 /**
  * Tapping a picture opens it full size; tapping anywhere closes it again. A picture that only lives
  * inside the app can be handed to the phone from here — a deliberate copy into Pictures, not the
  * hidden library file, so it shows up in a gallery the way a person expects.
+ *
+ * A photo post from the listing is not on the phone yet, so it is shown from its own address and
+ * saved the same way when asked. Tapping a thumbnail previews it; it never downloads by itself.
  */
 class ImageViewerActivity : AppCompatActivity() {
 
     override fun onCreate(state: Bundle?) {
         super.onCreate(state)
         setContentView(R.layout.activity_viewer)
-        val picture = ViewerQueue.uri
-        if (picture == null) {
+        val local = ViewerQueue.uri
+        val remote = ViewerQueue.remote
+        if (local == null && remote.isBlank()) {
             finish()
             return
         }
+        val title = ViewerQueue.title
+        val count = ViewerQueue.count
+
         findViewById<View>(R.id.viewerRoot).setOnClickListener { finish() }
-        findViewById<TextView>(R.id.viewerName).text = ViewerQueue.title
-        findViewById<ImageView>(R.id.viewerImage).load(picture)
-        findViewById<TextView>(R.id.viewerSave).setOnClickListener { save(picture) }
+        findViewById<TextView>(R.id.viewerName).text =
+            if (count > 1) "$title · $count pictures" else title
+        val image = findViewById<ImageView>(R.id.viewerImage)
+        if (local != null) image.load(local) else image.load(remote)
+        findViewById<TextView>(R.id.viewerSave).setOnClickListener {
+            if (local != null) save(local) else saveRemote(remote)
+        }
         ViewerQueue.uri = null
+        ViewerQueue.remote = ""
+        ViewerQueue.count = 1
     }
 
     private fun save(picture: Uri) {
         lifecycleScope.launch {
             val ok = withContext(Dispatchers.IO) {
-                runCatching { copyToPictures(picture) }.getOrDefault(false)
+                runCatching { writeToPictures { contentResolver.openInputStream(picture) } }
+                    .getOrDefault(false)
             }
-            Toast.makeText(
-                this@ImageViewerActivity,
-                if (ok) "Saved to Pictures/TikTokGrab" else "Could not save this picture",
-                Toast.LENGTH_SHORT
-            ).show()
+            toast(ok)
         }
     }
 
-    private fun copyToPictures(picture: Uri): Boolean {
+    private fun saveRemote(url: String) {
+        lifecycleScope.launch {
+            val ok = withContext(Dispatchers.IO) {
+                runCatching {
+                    val temp = File.createTempFile("grab", ".jpg")
+                    try {
+                        if (!Http.save(url, temp)) return@runCatching false
+                        writeToPictures { temp.inputStream() }
+                    } finally {
+                        temp.delete()
+                    }
+                }.getOrDefault(false)
+            }
+            toast(ok)
+        }
+    }
+
+    private fun toast(ok: Boolean) = Toast.makeText(
+        this,
+        if (ok) "Saved to Pictures/TikTokGrab" else "Could not save this picture",
+        Toast.LENGTH_SHORT
+    ).show()
+
+    /** One writer for both cases: a local file and a picture fetched from its address. */
+    private fun writeToPictures(open: () -> InputStream?): Boolean {
         val name = "tiktokgrab_${System.currentTimeMillis()}.jpg"
-        contentResolver.openInputStream(picture)?.use { source ->
+        open()?.use { source ->
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 val values = ContentValues().apply {
                     put(MediaStore.Images.Media.DISPLAY_NAME, name)
@@ -79,6 +114,11 @@ class ImageViewerActivity : AppCompatActivity() {
 }
 
 object ViewerQueue {
+    /** A picture already on the phone. */
     var uri: Uri? = null
+
+    /** A picture that is still online — a photo post opened straight from the listing. */
+    var remote: String = ""
     var title: String = ""
+    var count: Int = 1
 }

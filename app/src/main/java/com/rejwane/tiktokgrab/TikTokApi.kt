@@ -149,6 +149,7 @@ object TikTokApi {
             val video = item.optJSONObject("video") ?: JSONObject()
             val author = item.optJSONObject("author") ?: JSONObject()
             Authors.captureItem(context, author)
+            val images = imagesOf(item)
             Clip(
                 id = item.optString("id"),
                 title = item.optString("desc").trim(),
@@ -156,11 +157,13 @@ object TikTokApi {
                 stat = statOf(item),
                 bytes = video.optLong("size").takeIf { it > 0 }
                     ?: video.optJSONArray("bitrateInfo")?.optJSONObject(0)?.optJSONObject("PlayAddr")?.optLong("DataSize") ?: 0L,
-                thumb = urlOf(video.opt("cover")).ifBlank { urlOf(video.opt("originCover")) },
+                // A photo post has no cover; its first picture is the tile.
+                thumb = urlOf(video.opt("cover")).ifBlank { urlOf(video.opt("originCover")) }
+                    .ifBlank { images.firstOrNull().orEmpty() },
                 play = bestSource(video).ifBlank { urlOf(video.opt("downloadAddr")) },
                 page = "https://www.tiktok.com/@$user/video/${item.optString("id")}",
                 author = author.optString("uniqueId").ifBlank { user },
-                images = imagesOf(item)
+                images = images
             )
         }
     }

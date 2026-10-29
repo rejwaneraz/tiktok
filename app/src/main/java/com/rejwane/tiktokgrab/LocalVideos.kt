@@ -226,7 +226,7 @@ object LocalVideos {
 
     fun delete(context: Context, video: LocalVideo): Boolean {
         val gone = runCatching {
-            if (video.uri.scheme == "file") File(video.uri.path!!).delete()
+            if (video.uri.scheme == "file") video.uri.path?.let { File(it).delete() } ?: false
             else context.contentResolver.delete(video.uri, null, null) > 0
         }.getOrDefault(false)
         if (gone) Downloader.forget(context, video.clipId)

@@ -44,6 +44,9 @@ object Downloads {
     /** Set by whichever screen is on top; null while none is. */
     @Volatile private var listener: ((State) -> Unit)? = null
 
+    /** The notification is redrawn at most every 10%, not on every progress tick. */
+    private var lastNote = -1
+
     /** Kept so the progress notification can be updated without a screen. */
     @Volatile private var app: Context? = null
 
@@ -57,7 +60,11 @@ object Downloads {
 
     private fun publish(next: State) {
         state = next
-        app?.let { ctx -> DownloadService.progress(ctx, next.done, next.total) }
+        val bucket = next.done * 100 + next.percent / 10
+        if (bucket != lastNote) {
+            lastNote = bucket
+            app?.let { ctx -> DownloadService.progress(ctx, next.done, next.total) }
+        }
         val fn = listener ?: return
         main.post { fn(next) }
     }
@@ -74,6 +81,7 @@ object Downloads {
         val application = context.applicationContext
         app = application
         failedClips = emptyList()
+        lastNote = -1
         DownloadService.start(application, clips.size)
         publish(State(running = true, total = clips.size))
         job = scope.launch {
