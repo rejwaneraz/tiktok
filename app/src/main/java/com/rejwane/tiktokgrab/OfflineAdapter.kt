@@ -10,6 +10,7 @@ import android.widget.ImageView
 import android.widget.ProgressBar
 import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
+import coil.load
 
 /**
  * The swipe feed, laid out the way TikTok does it: caption and sound bottom-left, the action rail

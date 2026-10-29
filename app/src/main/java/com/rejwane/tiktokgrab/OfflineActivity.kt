@@ -78,8 +78,11 @@ class OfflineActivity : AppCompatActivity(), OfflineAdapter.Listener {
     private val profileRoot by lazy { findViewById<View>(R.id.profileRoot) }
     private val profileGrid by lazy { findViewById<RecyclerView>(R.id.profileGrid) }
 
-    /** One adapter per grid, reused — rebuilding it on every keystroke and resume is what dragged. */
-    private val exploreAdapter by lazy {
+    /**
+     * One adapter per grid, reused — rebuilding it on every keystroke and resume is what dragged.
+     * The type is written out because the click handler asks the same adapter for its list.
+     */
+    private val exploreAdapter: LocalGridAdapter by lazy {
         LocalGridAdapter(
             emptyList(), flat = true,
             onOpen = { video ->
@@ -89,7 +92,7 @@ class OfflineActivity : AppCompatActivity(), OfflineAdapter.Listener {
             onMenu = { ask(it) }
         )
     }
-    private val profileAdapter by lazy {
+    private val profileAdapter: LocalGridAdapter by lazy {
         LocalGridAdapter(
             emptyList(), flat = true,
             onOpen = { video ->
