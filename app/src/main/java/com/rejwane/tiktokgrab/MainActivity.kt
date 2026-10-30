@@ -882,9 +882,9 @@ class MainActivity : AppCompatActivity() {
      */
     private fun loadInstagram(query: String) {
         val single = InstagramApi.code(query) != null
-        // "everything" on Instagram costs about 0.86 MB of reading per post, so the unlimited setting
-        // is held to a ceiling instead of quietly billing for a thousand of them.
-        val cap = if (wantedLimit() <= 0) 60 else minOf(wantedLimit(), 120)
+        // "everything" on Instagram costs about 0.86 MB of reading per post, so it is held to 120
+        // instead of walking a ten-thousand-post account, and the status line says the price first.
+        val cap = if (wantedLimit() <= 0) 120 else minOf(wantedLimit(), 120)
         loadBtn.isEnabled = false
         refresh.isRefreshing = true
         showSection(LIST)

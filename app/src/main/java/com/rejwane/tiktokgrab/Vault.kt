@@ -78,18 +78,48 @@ object Vault {
     }
 
     /**
+     * A caption turned into a file name.
+     *
+     * The old rule cleaned the caption and *then* cut it at 60 characters, so a cut that landed after
+     * a full stop left the name ending in "." — and this storage layer refuses such a name with a
+     * FileNotFoundException whose whole message is the path, which is exactly what the phone showed for
+     * a reel that would not download ("… যাই…😢🔥."). Cutting on whole characters fixes that, and two
+     * more hazards with it: an emoji split in half becomes an invalid character, and a Bangla caption
+     * costs three bytes a letter (four for an emoji), so a name that looks short in characters can pass
+     * the 255 bytes a single file name is allowed. The limit is therefore counted in bytes, and any
+     * trailing dot or space is dropped after the cut.
+     */
+    fun titleOf(caption: String, maxBytes: Int): String {
+        val kept = StringBuilder()
+        var bytes = 0
+        var i = 0
+        while (i < caption.length) {
+            val point = caption.codePointAt(i)
+            i += Character.charCount(point)
+            if (Character.isISOControl(point)) continue
+            val size = if (point < 0x80) 1 else if (point < 0x800) 2 else if (point < 0x10000) 3 else 4
+            if (bytes + size > maxBytes) break
+            kept.appendCodePoint(point)
+            bytes += size
+        }
+        var name = kept.toString()
+        while (name.isNotEmpty() && (name.last() == '.' || name.last() == ' ')) name = name.dropLast(1)
+        return name.filterNot { "<>:\"/\\|?*".contains(it) }.trim()
+    }
+
+    /**
      * One picture of a photo post: same folder, same clip id, a "p<i>" suffix so a set of images
      * stays together and still reads as one clip.
      */
     fun photoFile(context: Context, caption: String, clipId: String, index: Int, count: Int): File {
-        val title = LocalVideos.sanitize(caption).take(48).ifBlank { "photo" }
+        val title = titleOf(caption, 120).ifBlank { "photo" }
         val suffix = if (count > 1) " p$index" else ""
         return File(dir(context), "$title [$clipId]$suffix.jpg$EXT")
     }
 
     /** A file nobody will mistake for a video, and never the one that is already there. */
     fun file(context: Context, caption: String, clipId: String): File {
-        val base = "${LocalVideos.sanitize(caption).take(60)} [$clipId]$EXT"
+        val base = "${titleOf(caption, 150).ifBlank { "clip" }} [$clipId]$EXT"
         val first = File(dir(context), base)
         // The id is in the name, so a file already sitting there is this same clip coming back —
         // a second copy of it under " (2)" would be two library rows for one clip.

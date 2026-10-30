@@ -25,7 +25,6 @@ object Downloader {
     private const val UA =
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36"
     private const val FOLDER = "TikTokGrab"
-    private const val ILLEGAL = "<>:\"/\\|?*"
 
     /** Anything under this is an error page, not a clip — the shortest real video is far bigger. */
     private const val NOT_A_VIDEO = 10_000L
@@ -74,8 +73,8 @@ object Downloader {
     }
 
     private fun fileName(clip: Clip): String {
-        val title = clip.title.filterNot { ILLEGAL.contains(it) }.take(50).trim()
-        return "${if (title.isBlank()) "tiktok" else title} [${clip.id}].mp4"
+        val title = Vault.titleOf(clip.title, 150).ifBlank { "tiktok" }
+        return "$title [${clip.id}].mp4"
     }
 
     /** One folder per author: Downloads/TikTokGrab/<username>/… */
@@ -142,30 +141,13 @@ object Downloader {
             coroutineContext.ensureActive()
             val target = Vault.photoFile(context, clip.title, clip.id, index + 1, clip.images.size)
             if (!target.isFile || target.length() == 0L) {
-                val request = Request.Builder().url(url)
-                    .header("User-Agent", UA)
-                    .header("Referer", refererOf(clip))
-                    .build()
-                client.newCall(request).execute().use { response ->
-                    if (!response.isSuccessful) throw RuntimeException("HTTP ${response.code}")
-                    val body = response.body ?: throw RuntimeException("empty picture")
-                    val expected = body.contentLength()
-                    // A picture that lands half way is worse than one that never lands: it is a
-                    // permanent file the next pass reads as complete. So it comes down as a .part,
-                    // is measured against what the server promised, and only then becomes the file.
-                    val temp = File(target.absolutePath + ".part")
-                    try {
-                        temp.outputStream().use { out -> body.byteStream().use { input -> input.copyTo(out) } }
-                        val written = temp.length()
-                        if (written < SMALLEST_PICTURE)
-                            throw RuntimeException("not a picture (only $written bytes)")
-                        if (expected > 0 && written != expected)
-                            throw RuntimeException("incomplete picture: $written of $expected bytes")
-                        if (!temp.renameTo(target)) throw RuntimeException("could not store the picture")
-                    } catch (e: Exception) {
-                        runCatching { temp.delete() }
-                        throw e
-                    }
+                try {
+                    fetchPicture(url, target, refererOf(clip))
+                } catch (e: java.io.FileNotFoundException) {
+                    // The name came from a caption. If this storage layer still refuses it, the
+                    // picture is worth more than the title: write it under the clip id instead.
+                    fetchPicture(url, Vault.photoFile(context, clip.id, clip.id, index + 1,
+                        clip.images.size), refererOf(clip))
                 }
             }
             if (index == 0) first = target.absolutePath
@@ -175,6 +157,36 @@ object Downloader {
         Vault.record(context, clip.id, clip.author, clip.title, clip.page)
         prefs(context).edit().putStringSet("ids", doneIds(context) + clip.id).apply()
         Saved(clip.id, first, Uri.fromFile(File(first)).toString(), total, false)
+    }
+
+    /**
+     * One picture, through a .part file and renamed only after the bytes match what the server
+     * promised. A picture that lands half way is worse than one that never lands: it is a permanent
+     * file the next pass reads as complete.
+     */
+    private fun fetchPicture(url: String, target: File, referer: String) {
+        val request = Request.Builder().url(url)
+            .header("User-Agent", UA)
+            .header("Referer", referer)
+            .build()
+        client.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) throw RuntimeException("HTTP ${response.code}")
+            val body = response.body ?: throw RuntimeException("empty picture")
+            val expected = body.contentLength()
+            val temp = File(target.absolutePath + ".part")
+            try {
+                temp.outputStream().use { out -> body.byteStream().use { input -> input.copyTo(out) } }
+                val written = temp.length()
+                if (written < SMALLEST_PICTURE)
+                    throw RuntimeException("not a picture (only $written bytes)")
+                if (expected > 0 && written != expected)
+                    throw RuntimeException("incomplete picture: $written of $expected bytes")
+                if (!temp.renameTo(target)) throw RuntimeException("could not store the picture")
+            } catch (e: Exception) {
+                runCatching { temp.delete() }
+                throw e
+            }
+        }
     }
 
     private suspend fun attempt(context: Context, clip: Clip, name: String,
@@ -219,8 +231,21 @@ object Downloader {
     private suspend fun saveVault(context: Context, clip: Clip, response: Response,
                                   onBytes: (Long) -> Unit): Pair<String, String> {
         val file = Vault.file(context, clip.title.ifBlank { "tiktok" }, clip.id)
-        // The clip only becomes the real file once every byte is down: writing straight into it would
-        // leave a half file (or none at all, if the retry then failed) where a good clip used to be.
+        return try {
+            writeInto(file, response, onBytes)
+        } catch (e: java.io.FileNotFoundException) {
+            // The name came from a caption, and some storage layers still refuse one it finds odd.
+            // The clip is worth more than its title: the body has not been touched yet, so the same
+            // bytes go to a name built from the clip id alone rather than being lost.
+            val plain = Vault.file(context, clip.id, clip.id)
+            if (plain.absolutePath == file.absolutePath) throw e
+            writeInto(plain, response, onBytes)
+        }
+    }
+
+    /** The clip only becomes the real file once every byte is down and renamed into place. */
+    private suspend fun writeInto(file: File, response: Response,
+                                  onBytes: (Long) -> Unit): Pair<String, String> {
         val temp = File(file.absolutePath + ".part")
         try {
             temp.outputStream().use { stream(response, it, onBytes) }

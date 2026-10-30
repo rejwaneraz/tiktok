@@ -315,6 +315,25 @@ blaming that one's lines — a first version did exactly that, and a gate that c
 The rule was validated against a fixture holding two real clashes (one of them in a multi-line
 signature) and three legal shadowings; the check reports the first two and stays silent on the rest.
 
+### 2026-10-30 — a caption is not a file name, and a foreground service that fails must say so
+The phone showed `Done: 0/1 · 1 failed · /storage/emulated/0/Download/TikTokGrab/library/ভুঁয়ে দিলে হাই
+আমার ki যে হয়ে যাই…😢🔥.` — an exception whose whole message is a path, which is a
+`FileNotFoundException`: the file could not be created at all. The old rule cleaned the caption and
+*then* cut it at 60 characters, so a cut landing after a full stop produced a name ending in `.`; this
+storage layer refuses that. `Vault.titleOf` now cuts on whole characters within a **byte** budget
+(Bangla is three bytes a letter, an emoji four, and a single file name is capped at 255 bytes), drops a
+trailing dot or space, and never leaves half an emoji behind. As a last resort, if creating the file
+still fails with `FileNotFoundException` — before any byte of the body has been read, so the download
+is not lost — the clip is written under a name built from its id alone. A caption is worth less than the
+clip.
+
+The crash on the realme (Android 15) was ours: `DownloadService.onStartCommand` wrapped
+`startForeground()` in `runCatching` and carried on, so when it failed the service never announced
+itself and the system killed the process with `ForegroundServiceDidNotStartInTimeException`. It now
+checks the result: if the foreground start failed, it posts the plain notification instead and calls
+`stopSelf()` — the download queue lives in its own scope and does not need the service at all, so losing
+the service must never mean losing the batch or the app.
+
 ## Measured, from a real request (2026-10-20)
 
 `https://www.tikwm.com/api/?url=<video>&hd=1` → 200, 7.2 KB, 2.1 s: `duration`, `size`, `hd_size`,

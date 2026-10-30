@@ -23,9 +23,18 @@ class DownloadService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        runCatching {
+        // The system gives this service a few seconds to call startForeground(). Swallowing a failure
+        // here is what crashed the app on a realme with Android 15: the service never announced
+        // itself, and the system killed the process with ForegroundServiceDidNotStartInTimeException.
+        val started = runCatching {
             channel(this)
             startForeground(ID, build(this, 0, 0))
+        }.isSuccess
+        if (!started) {
+            // The queue does not need this service — only the notification does — so show that the
+            // plain way and let the service go instead of being killed for it.
+            runCatching { manager(this)?.notify(ID, build(this, 0, 0)) }
+            stopSelf()
         }
         return START_NOT_STICKY
     }
