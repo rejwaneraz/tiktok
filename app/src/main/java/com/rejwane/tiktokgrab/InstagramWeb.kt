@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.app.Activity
 import android.os.Handler
 import android.os.Looper
+import android.view.View
 import android.view.ViewGroup
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
@@ -67,12 +68,18 @@ class InstagramWeb(private val activity: Activity) {
                     return scheme != "http" && scheme != "https"
                 }
             }
-            alpha = 0f
-            // A window detached between the check and here has no content view to hold this.
+            // Laid out at real size but never drawn, so it takes no touches and shows nothing: a 2 x 2
+            // WebView gives the page a 2-pixel viewport, and Instagram's grid only loads the tiles the
+            // viewport asks for — which is how a scroll can appear to stop at twelve posts.
+            val metrics = activity.resources.displayMetrics
+            visibility = View.INVISIBLE
             val holder = runCatching {
                 activity.findViewById<ViewGroup>(android.R.id.content)
             }.getOrNull()
-            runCatching { holder?.addView(this, ViewGroup.LayoutParams(2, 2)) }
+            runCatching {
+                holder?.addView(this, ViewGroup.LayoutParams(
+                    metrics.widthPixels, (metrics.heightPixels * 0.9f).toInt()))
+            }
         }
         web = built
         return built

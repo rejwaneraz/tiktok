@@ -85,7 +85,30 @@ object Downloader {
     suspend fun save(context: Context, clip: Clip, onPercent: (Float) -> Unit): Saved {
         if (clip.play.isBlank() && clip.images.isEmpty()) throw RuntimeException("no video link")
         if (clip.id in doneIds(context)) return Saved(clip.id, "", "", 0L, true)
+        return try {
+            saveNow(context, clip, onPercent)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            // Instagram's addresses are signed and die within hours, so a clip listed this morning can
+            // already answer 403 by the time it is ticked. Re-reading that one post costs ~0.86 MB and
+            // is the difference between "some reels download and some do not" and a library that works.
+            val fresh: Clip = refreshInstagram(clip) ?: throw e
+            saveNow(context, fresh, onPercent)
+        }
+    }
 
+    /** The post again through its own link, when that link says Instagram and names a post. */
+    private suspend fun refreshInstagram(clip: Clip): Clip? {
+        if (!fromInstagram(clip)) return null
+        val code = Regex("/(?:p|reel)/([A-Za-z0-9_-]{11})").find(clip.page)?.groupValues?.get(1)
+            ?: return null
+        return withContext(Dispatchers.IO) {
+            runCatching { InstagramApi.clipFor(code) }.getOrNull()
+        }
+    }
+
+    private suspend fun saveNow(context: Context, clip: Clip, onPercent: (Float) -> Unit): Saved {
         // A photo (slideshow) post has no video: its pictures are the download.
         if (clip.play.isBlank()) return savePhotos(context, clip, onPercent)
 
