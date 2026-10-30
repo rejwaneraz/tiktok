@@ -46,24 +46,28 @@ object ClipStats {
 
     fun save(context: Context, stats: Map<String, Stat>) {
         if (stats.isEmpty()) return
-        val root = table(context)
-        stats.forEach { (id, stat) ->
-            if (id.isBlank()) return@forEach
-            val old = root.optJSONObject(id)
-            root.put(id, JSONObject()
-                .put("v", maxOf(stat.plays, old?.optLong("v") ?: 0L))
-                .put("l", maxOf(stat.likes, old?.optLong("l") ?: 0L))
-                .put("c", maxOf(stat.comments, old?.optLong("c") ?: 0L))
-                .put("k", maxOf(stat.collects, old?.optLong("k") ?: 0L))
-                .put("s", maxOf(stat.shares, old?.optLong("s") ?: 0L))
-                .put("m", stat.sound.ifBlank { old?.optString("m") ?: "" })
-                .put("a", stat.soundAuthor.ifBlank { old?.optString("a") ?: "" })
-                .put("t", if (stat.labels.isNotEmpty()) JSONArray(stat.labels)
-                else old?.optJSONArray("t") ?: JSONArray())
-            )
+        // The cached table is shared with every grid that is drawing: mutate and persist it under one
+        // lock, or two pages arriving at once overwrite each other.
+        synchronized(this) {
+            val root = table(context)
+            stats.forEach { (id, stat) ->
+                if (id.isBlank()) return@forEach
+                val old = root.optJSONObject(id)
+                root.put(id, JSONObject()
+                    .put("v", maxOf(stat.plays, old?.optLong("v") ?: 0L))
+                    .put("l", maxOf(stat.likes, old?.optLong("l") ?: 0L))
+                    .put("c", maxOf(stat.comments, old?.optLong("c") ?: 0L))
+                    .put("k", maxOf(stat.collects, old?.optLong("k") ?: 0L))
+                    .put("s", maxOf(stat.shares, old?.optLong("s") ?: 0L))
+                    .put("m", stat.sound.ifBlank { old?.optString("m") ?: "" })
+                    .put("a", stat.soundAuthor.ifBlank { old?.optString("a") ?: "" })
+                    .put("t", if (stat.labels.isNotEmpty()) JSONArray(stat.labels)
+                    else old?.optJSONArray("t") ?: JSONArray())
+                )
+            }
+            store(context).edit().putString(KEY, root.toString()).apply()
+            cache = root
         }
-        store(context).edit().putString(KEY, root.toString()).apply()
-        synchronized(this) { cache = root }
     }
 
     fun of(context: Context, clipId: String): Stat {

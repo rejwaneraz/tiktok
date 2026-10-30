@@ -300,7 +300,7 @@ class OfflineActivity : AppCompatActivity(), OfflineAdapter.Listener {
             MotionEvent.ACTION_UP -> {
                 if (profileMode == DRAG_HORIZONTAL) {
                     val dx = ev.x - profileFromX
-                    if (abs(dx) > profileWidth * 0.18f) finishProfileDrag(dx < 0) else settleProfileDrag()
+                    if (abs(dx) > profileWidth * 0.25f) finishProfileDrag(dx < 0) else settleProfileDrag()
                     profileMode = DRAG_NONE
                     return true
                 }
@@ -459,12 +459,20 @@ class OfflineActivity : AppCompatActivity(), OfflineAdapter.Listener {
     override fun onComments(video: LocalVideo) = CommentSheet.show(this, video) { pull -> pullComments(pull) }
 
     private suspend fun pullComments(video: LocalVideo): Boolean = withContext(Dispatchers.IO) {
-        val got = Comments.fetch(this@OfflineActivity, video.clipId)
+        val got = Comments.fetch(this@OfflineActivity, video.clipId, video.isPhoto)
         Backup.snapshot(this@OfflineActivity)
         !got.failed
     }
 
     override fun onShare(video: LocalVideo) = LocalMenu.share(this, video)
+
+    /** A slideshow is one clip holding many pictures: the tap hands the whole set to the viewer. */
+    override fun onOpenPhotos(video: LocalVideo) {
+        val urls = (if (video.photos.isNotEmpty()) video.photos else listOf(video.uri)).map { it.toString() }
+        ViewerQueue.urls = urls
+        ViewerQueue.title = video.caption.ifBlank { "Photo post" }
+        startActivity(Intent(this, ImageViewerActivity::class.java))
+    }
 
     private fun tiktokProfile(author: String = opened ?: "") = "https://www.tiktok.com/@$author"
 
@@ -776,7 +784,9 @@ class OfflineActivity : AppCompatActivity(), OfflineAdapter.Listener {
     /** Keeps whatever screen is open, only re-pointed at the new set of files. */
     private fun refresh() {
         when (section) {
-            FEED -> show(feed.filter { kept -> videos.any { it.uri == kept.uri } }, position)
+            // The feed keeps its adapter: a download landing or a clip being deleted must not
+            // rebuild every page, which is what restarted the video that was already playing.
+            FEED -> swapTo(feed.filter { kept -> videos.any { it.uri == kept.uri } }, position)
             EXPLORE -> fillExplore()
             AUTHORS -> showAuthors()
             else -> (opened ?: videos.firstOrNull()?.author)?.let { showProfile(it) }

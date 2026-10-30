@@ -25,9 +25,10 @@ data class Clip(
 }
 
 /** clips + the link the user typed, with any short link already expanded. match is set when a
- *  specific video link was given and found. */
+ *  specific video link was given and found. `answered` is whether TikTok itself replied — a clip
+ *  fetched from the reader alone says nothing about the login, so it must not be reported as one. */
 data class Listing(val clips: List<Clip>, val source: String, val match: Clip? = null,
-                   val searchedPages: Int = 0)
+                   val searchedPages: Int = 0, val answered: Boolean = false)
 
 object TikTokApi {
 
@@ -163,7 +164,8 @@ object TikTokApi {
                 thumb = urlOf(video.opt("cover")).ifBlank { urlOf(video.opt("originCover")) }
                     .ifBlank { images.firstOrNull().orEmpty() },
                 play = if (photo) "" else bestSource(video).ifBlank { urlOf(video.opt("downloadAddr")) },
-                page = "https://www.tiktok.com/@$user/video/${item.optString("id")}",
+                // A slideshow post only answers at /photo/<id>; the /video/ address of it is a 404.
+                page = "https://www.tiktok.com/@$user/${if (photo) "photo" else "video"}/${item.optString("id")}",
                 author = author.optString("uniqueId").ifBlank { user },
                 images = images
             )
@@ -286,14 +288,25 @@ object TikTokApi {
         var pages = 0
         var match: Clip? = null
         var rowsOnFirstPage = -1
+        var stalled = ""
 
         while (true) {
-            val data = JSONObject(Http.get(pageUrl(uid, cursor)))
+            // One page out of a long walk can fail on a hiccup, and the clips that already reached
+            // the grid must not be thrown away with it: a stalled page ends the walk, it does not
+            // undo it. Only a walk that never got anything is reported as a failure.
+            val read = runCatching {
+                val data = JSONObject(Http.get(pageUrl(uid, cursor)))
+                data to parse(context, data, user)
+            }
+            if (read.isFailure) {
+                stalled = read.exceptionOrNull()?.message ?: "read failed"
+                break
+            }
+            val (data, clips) = read.getOrThrow()
             val batch = data.optJSONArray("itemList") ?: JSONArray()
             if (rowsOnFirstPage < 0) rowsOnFirstPage = batch.length()
             if (batch.length() == 0) break
             pages++
-            val clips = parse(context, data, user)
             clips.firstOrNull { it.id == wantedId }?.let { match = it }
             val fresh = ArrayList<Clip>()
             for (clip in clips) if (seen.add(clip.id)) fresh.add(clip)
@@ -311,13 +324,23 @@ object TikTokApi {
             if (take.isEmpty()) break   // a page of nothing new: stop instead of spinning
             if (!data.optBoolean("hasMorePrevious")) break
             if (wantedId != null && pages >= SEARCH_PAGES) break
-            val last = batch.optJSONObject(batch.length() - 1)?.optLong("createTime") ?: break
-            cursor = (last * 1000).toString()   // cursor is milliseconds, not seconds
+            // The reader's own cursor wins; the newest item's timestamp is the fallback. A missing
+            // one must stop the walk out loud — asking for cursor 0 again is how "All" used to
+            // quietly end at the first fifteen clips.
+            val last = batch.optJSONObject(batch.length() - 1)?.optLong("createTime") ?: 0L
+            val next = data.optString("cursor").ifBlank { if (last > 0) (last * 1000).toString() else "" }
+            if (next.isBlank()) {
+                stalled = "@$user: the listing stopped handing back a page pointer after $pages pages"
+                break
+            }
+            cursor = next
         }
+
+        if (stalled.isNotBlank() && out.isEmpty() && match == null) throw RuntimeException(stalled)
 
         if (wantedId != null && match != null) {
             Log.d(TAG, "found single clip $wantedId in $pages pages")
-            return@withContext Listing(listOf(match!!), source, match, pages)
+            return@withContext Listing(listOf(match!!), source, match, pages, true)
         }
         if (wantedId != null) {
             // Older clips sit past what we searched; the reader answers them by id without a search.
@@ -332,6 +355,6 @@ object TikTokApi {
             )
         }
         Log.d(TAG, "listed ${out.size} clips for $user")
-        Listing(out, source, null, pages)
+        Listing(out, source, null, pages, true)
     }
 }

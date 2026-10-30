@@ -16,7 +16,7 @@ object Names {
         "nusrat", "jannat", "fariha", "sadia", "sumaiya", "sumaya", "mariam", "fatima", "ayesha",
         "aisha", "khadija", "ruqayya", "zainab", "rubaiya", "tahmina", "tania", "tamanna", "trisha",
         "priya", "rupa", "shapla", "mim", "iti", "liza", "rin", "mili", "keya", "meghla", "nishi",
-        "boss", "queen", "princess", "miss", "mrs", "auntie", "girl", "she ", "her ", "mom ", "maa",
+        "boss", "queen", "princess", "miss", "mrs", "auntie", "girl", "she", "her", "mom", "maa",
         "ammu", "chi", "kun", "chan", "ladies", "female", "madam", "bi", "bee"
     )
 
@@ -26,14 +26,17 @@ object Names {
         "talukder", "howlader", "molla", "sheikh", "mondal", "barua", "chakma", "mahedi", "mehedi",
         "shakib", "tamim", "mushfiqur", "sakib", "rajib", "naim", "sabbir", "jubayer", "rifat",
         "shohag", "sohel", "jabbar", "karim", "rahim", "kalam", "jalal", "jamal", "bulbul", "amir",
-        "king", "boy", "bro", "bhai", "mr ", "sir", "he ", "him", "male", "uncle", "abba", "baba"
+        "king", "boy", "bro", "bhai", "mr", "sir", "he", "him", "male", "uncle", "abba", "baba"
     )
 
+    /** Whole words, because "he" inside "she" and "bi" inside "rabbit" got most faces wrong. */
+    private val split = Regex("[^\\p{L}\\p{N}]+")
+
     fun guess(name: String): Int {
-        val text = " " + name.lowercase() + " "
+        val parts = name.lowercase().split(split).filter { it.isNotBlank() }.toSet()
         var score = 0
-        girl.forEach { if (text.contains(it)) score-- }
-        boy.forEach { if (text.contains(it)) score++ }
+        girl.forEach { if (it in parts) score-- }
+        boy.forEach { if (it in parts) score++ }
         return when {
             score > 0 -> BOY
             score < 0 -> GIRL

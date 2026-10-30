@@ -13,14 +13,19 @@ object Http {
     private val client = OkHttpClient.Builder()
         .connectTimeout(30, TimeUnit.SECONDS)
         .readTimeout(60, TimeUnit.SECONDS)
+        // A whole request has to end sometime. Without this, a server that trickles one byte a
+        // minute keeps a worker — and a listing walk — open forever.
+        .callTimeout(120, TimeUnit.SECONDS)
         .followRedirects(true)
         .build()
 
     private fun request(url: String) = Request.Builder().url(url)
         .header("User-Agent", UA)
-        .header("Cookie", Cookies.header())
         .header("Referer", "https://www.tiktok.com/")
         .header("Accept", "application/json, text/plain, */*")
+        // The session belongs to TikTok alone: a short link that hops through another host must not
+        // carry it there.
+        .apply { if (url.contains("tiktok.com")) header("Cookie", Cookies.header()) }
         .build()
 
     fun get(url: String): String {
@@ -57,6 +62,10 @@ object Http {
         client.newCall(call).execute().use { response ->
             if (!response.isSuccessful) return false
             val body = response.body ?: return false
+            // A login page or an error page is text. Saved as a .jpg it becomes a picture that never
+            // goes away, because the app then finds a file where it expects one.
+            val type = body.contentType()?.type
+            if (type == "text") return false
             dest.parentFile?.mkdirs()
             body.byteStream().use { input -> dest.outputStream().use { input.copyTo(it) } }
             return dest.length() > 0

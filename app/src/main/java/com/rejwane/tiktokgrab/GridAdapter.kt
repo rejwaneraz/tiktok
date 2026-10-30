@@ -166,14 +166,16 @@ class GridAdapter(
         holder.playsBadge.text = if (clip.stat.plays > 0) "▶ ${short(clip.stat.plays)}" else "▶ —"
         holder.playsBadge.visibility = View.VISIBLE
         holder.root.setOnClickListener {
-            // `position` is captured at bind time: bindingAdapterPosition turns -1 once the holder is
-            // recycled, and a tap that lands in that window used to do nothing at all.
+            // The list can stream a new page or re-sort between this bind and the tap, so the row is
+            // looked up again when the finger lands. NO_POSITION means the holder is already gone.
+            val at = holder.bindingAdapterPosition
+            if (at == RecyclerView.NO_POSITION) return@setOnClickListener
             if (selectMode) {
                 if (!selected.add(clip.id)) selected.remove(clip.id)
-                notifyItemChanged(position)
+                notifyItemChanged(at)
                 onSelectionChanged()
             } else {
-                onOpen(position)
+                onOpen(at)
             }
         }
         holder.root.setOnLongClickListener {

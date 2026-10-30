@@ -182,9 +182,8 @@ class MainActivity : AppCompatActivity() {
 
         // Android cannot ask for All files access at install time, and a fresh install has nothing
         // in the library yet — so the first launch is where the switch has to be explained.
-        val ui = getSharedPreferences("ui", MODE_PRIVATE)
-        if (!Vault.granted(this) && !ui.getBoolean("asked_access", false)) {
-            ui.edit().putBoolean("asked_access", true).apply()
+        if (!Vault.granted(this) && !Ui.bool(this, "asked_access", false)) {
+            Ui.setBool(this, "asked_access", true)
             statusView.post { askForAccess() }
         }
     }
@@ -266,8 +265,26 @@ class MainActivity : AppCompatActivity() {
         findViewById<TextView>(id).setTextColor(getColor(if (on) R.color.accent else R.color.muted))
     }
 
-    /** TikTok-shaped list: grey section captions, then rows with the current value on the right. */
+    /** Every number a Settings row shows costs a folder read, so they are taken together off-main. */
+    private data class Counts(val avatars: Int, val comments: Int, val backup: Int,
+                              val frames: Boolean, val crash: String)
+
+    private fun readCounts() = Counts(
+        Authors.cachedAvatars(applicationContext),
+        Comments.stored(applicationContext),
+        Backup.recordCount(applicationContext),
+        FrameExport.folder(applicationContext).isDirectory,
+        CrashRecorder.text(applicationContext)
+    )
+
     private fun showSettings() {
+        lifecycleScope.launch {
+            paintSettings(withContext(Dispatchers.IO) { readCounts() })
+        }
+    }
+
+    /** TikTok-shaped list: grey section captions, then rows with the current value on the right. */
+    private fun paintSettings(read: Counts) {
         // The folder was already read by the library refresh; scanning again here would be a disk
         // read on the thread that draws.
         val saved = libraryCache
@@ -294,8 +311,8 @@ class MainActivity : AppCompatActivity() {
                     askForAccess()
                 }
             },
-            SettingsAdapter.Row("Profile pictures", "${Authors.cachedAvatars(this)} cached", "Storage") {
-                val had = Authors.cachedAvatars(this)
+            SettingsAdapter.Row("Profile pictures", "${read.avatars} cached", "Storage") {
+                val had = read.avatars
                 MaterialAlertDialogBuilder(this)
                     .setTitle("Profile pictures")
                     .setMessage(lines("$had pictures are kept in Download/TikTokGrab/Backup/avatars.",
@@ -333,15 +350,15 @@ class MainActivity : AppCompatActivity() {
                 TikTokApi.clearCache(this)
                 note("Cached profiles", "Cleared — the next list read refreshes them from TikTok.")
             },
-            SettingsAdapter.Row("Saved in Downloads", "${Backup.recordCount(this)} files", "Backup") {
+            SettingsAdapter.Row("Saved in Downloads", "${read.backup} files", "Backup") {
                 note("Backup folder", lines("Download/TikTokGrab/Backup", "",
-                    "${Comments.stored(this)} comment files",
-                    "${Authors.cachedAvatars(this)} profile pictures",
+                    "${read.comments} comment files",
+                    "${read.avatars} profile pictures",
                     "1 records file"))
             },
             SettingsAdapter.Row("Fetch comments for saved videos",
                 if (commentTask?.isActive == true) "running $commentDone/$commentTotal — tap to stop"
-                else "${Comments.stored(this)} of ${saved.size} clips", "Backup") { fetchComments(saved) },
+                else "${read.comments} of ${saved.size} clips", "Backup") { fetchComments(saved) },
             SettingsAdapter.Row("Back up now", "", "Backup") {
                 Backup.snapshot(this)
                 note("Backed up", lines("Records written to", "Download/TikTokGrab/Backup/meta"))
@@ -353,8 +370,8 @@ class MainActivity : AppCompatActivity() {
                 }
             },
             SettingsAdapter.Row("Crash report",
-                if (CrashRecorder.text(this).isBlank()) "none" else "recorded", "About") {
-                val log = CrashRecorder.text(this)
+                if (read.crash.isBlank()) "none" else "recorded", "About") {
+                val log = read.crash
                 if (log.isBlank()) note("Crash report", lines("Nothing has been recorded yet.",
                     "", "If the app stops again, open this row and read me what it says."))
                 else MaterialAlertDialogBuilder(this)
@@ -368,7 +385,7 @@ class MainActivity : AppCompatActivity() {
                     .show()
             },
             SettingsAdapter.Row("Export frames",
-                if (FrameExport.folder(this).isDirectory) "on disk" else "none", "Training") {
+                if (read.frames) "on disk" else "none", "Training") {
                 exportFrames()
             },
             SettingsAdapter.Row("Version", packageVersion(), "About") {
@@ -519,21 +536,26 @@ class MainActivity : AppCompatActivity() {
             showSettings()
             return
         }
-        val missing = Comments.missingFor(this, saved)
-        if (missing.isEmpty()) {
-            note("Comments", "Every saved video already has its comments.")
-            return
+        lifecycleScope.launch {
+            val missing = withContext(Dispatchers.IO) {
+                // One folder check per saved clip, so the whole list is read off the frame thread.
+                Comments.missingFor(applicationContext, saved)
+            }
+            if (missing.isEmpty()) {
+                note("Comments", "Every saved video already has its comments.")
+                return@launch
+            }
+            val megabytes = (missing.size * 4 + 99) / 100
+            val minutes = (missing.size * 12 + 599) / 600
+            MaterialAlertDialogBuilder(this@MainActivity)
+                .setTitle("Fetch ${missing.size} comment sets?")
+                .setMessage(lines("About $megabytes MB and $minutes minutes: the reader answers one clip " +
+                    "per second, and each set is assumed to hold up to 100 comments. Comment pictures " +
+                    "can push that higher.", "", "Tap the same row again to stop."))
+                .setNegativeButton("Not now", null)
+                .setPositiveButton("Fetch") { _, _ -> pullComments(missing) }
+                .show()
         }
-        val megabytes = (missing.size * 4 + 99) / 100
-        val minutes = (missing.size * 12 + 599) / 600
-        MaterialAlertDialogBuilder(this)
-            .setTitle("Fetch ${missing.size} comment sets?")
-            .setMessage(lines("About $megabytes MB and $minutes minutes: the reader answers one clip " +
-                "per second, and each set is assumed to hold up to 100 comments. Comment pictures " +
-                "can push that higher.", "", "Tap the same row again to stop."))
-            .setNegativeButton("Not now", null)
-            .setPositiveButton("Fetch") { _, _ -> pullComments(missing) }
-            .show()
     }
 
     private fun pullComments(missing: List<LocalVideo>) {
@@ -544,7 +566,9 @@ class MainActivity : AppCompatActivity() {
             var failed = 0
             missing.forEach { video ->
                 val got = withContext(Dispatchers.IO) {
-                    runCatching { Comments.fetch(this@MainActivity, video.clipId) }.getOrNull()
+                    runCatching {
+                        Comments.fetch(this@MainActivity, video.clipId, video.isPhoto)
+                    }.getOrNull()
                 }
                 commentDone++
                 // Three outcomes, not two: the clip has none, the reader answered and had none, or the
@@ -692,8 +716,7 @@ class MainActivity : AppCompatActivity() {
         else "Latest · newest first · ${adapter.count()} videos"
     }
 
-    private fun libraryOrder() =
-        getSharedPreferences("ui", MODE_PRIVATE).getInt("library_order", 0)
+    private fun libraryOrder() = Ui.int(this, "library_order", 0)
 
     /** Largest first answers "what do I delete", most played answers "what do I keep". */
     private fun sortedForLibrary(list: List<LocalVideo>): List<LocalVideo> = when (libraryOrder()) {
@@ -707,7 +730,7 @@ class MainActivity : AppCompatActivity() {
         MaterialAlertDialogBuilder(this)
             .setTitle("Library order")
             .setSingleChoiceItems(libraryOrders, libraryOrder()) { dialog, which ->
-                getSharedPreferences("ui", MODE_PRIVATE).edit().putInt("library_order", which).apply()
+                Ui.setInt(this@MainActivity, "library_order", which)
                 dialog.dismiss()
                 refreshLibrary()
             }
@@ -772,7 +795,9 @@ class MainActivity : AppCompatActivity() {
                 ) { count -> runOnUiThread { statusView.text = "Loading… $count loaded" } }
                 val user = TikTokApi.username(result.source)
                 val clips = result.clips
-                Session.good(this@MainActivity)
+                // A reader-only answer says nothing about the TikTok login, so it must not be filed
+                // as one: the session line only moves when TikTok itself replied.
+                if (result.answered) Session.good(this@MainActivity)
                 // A single-video answer never streams a page, so it is placed here.
                 if (!shown) adapter.submit(clips, Downloader.doneIds(this@MainActivity))
                 val already = clips.count { it.id in Downloader.doneIds(this@MainActivity) }
@@ -783,7 +808,7 @@ class MainActivity : AppCompatActivity() {
                     statusView.text = "Found — downloading… @$user"
                     result.match?.let { startDownloads(listOf(it)) }
                 } else {
-                    val searched = Regex("/video/(\\d+)").find(result.source) != null
+                    val searched = Regex("/(?:video|photo)/(\\d+)").find(result.source) != null
                     statusView.text = "${clips.size} videos — @$user$savedNote" +
                             if (searched) " · video not found in ${result.searchedPages} pages" else ""
                 }
@@ -858,7 +883,7 @@ class MainActivity : AppCompatActivity() {
         } else if (state.total > 0) {
             statusView.text = getString(R.string.done, state.done - state.failed, state.total) +
                 if (state.failed == 0) "" else " · ${state.failed} failed"
-            if (!downloadsWereRunning && section == LIBRARY) refreshLibrary()
+            if (downloadsWereRunning && section == LIBRARY) refreshLibrary()
         }
         downloadsWereRunning = state.running
     }

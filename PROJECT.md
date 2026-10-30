@@ -194,6 +194,52 @@ carries pictures, and the audio is dropped. `/photo/<id>` is parsed beside `/vid
 reader is asked about the page that was actually pasted. The picture viewer became a pager, so a
 fourteen-picture post swipes like the app it comes from; Save copies whichever page is showing.
 
+### 2026-10-30 — a slideshow is one clip, and nothing lands until it is whole
+A photo post is one post, not fourteen files: the pictures share their clip id, so the library groups
+them, shows the first as the tile, and a tap opens the whole set in the viewer. Deleting the clip takes
+every picture with it, and the "already downloaded" mark is only dropped when the last one is gone.
+Sharing sends the set as one multi-file share; "Open on TikTok" and the comment reader now use the
+`/photo/<id>` address the post actually lives at, which is what made a slideshow's comments readable.
+
+Every byte that arrives comes through a `.part` file and is renamed only after it matches what the
+server promised — a video, a picture, and a copy out of MediaStore all do this now. Pictures used to be
+written straight into their final name, so a connection that stopped mid-image left a half file that
+the next pass read as complete forever. A stale `.part` older than 30 minutes is swept on the next scan;
+a live one is never touched.
+
+### 2026-10-30 — a stalled page is the end of the walk, not the end of the listing
+A 500-clip "All" is thirty-odd requests, and one hiccup used to throw away everything that had already
+reached the grid while marking the session dead. Now a failed page stops the walk and the clips already
+streamed stay; only a walk that never got anything is reported as a failure. The next cursor comes from
+the answer itself, then from the newest item's timestamp — and when neither exists the walk says so
+instead of asking for page 1 again and quietly stopping at fifteen.
+
+### 2026-10-30 — the session line only moves when TikTok answered
+A pasted link can be answered by the public reader without TikTok ever seeing the cookie. That is a
+success about the clip, not about the login, so it no longer writes "OK" into Settings; the row reports
+what the last real TikTok read did. This is the ground rule ("a session is only as good as the last real
+read") finally applied to the path that was breaking it.
+
+### 2026-10-30 — the backup keeps what it actually stores
+Hand-made tags were never in the store list, so a reinstall silently removed every label a person had
+typed. Preferences are also not all text: an Int written into the backup came back as text and the next
+`getInt` threw, which is a crash on the first screen after a restore. Values now carry their type in the
+backup, and the two readers that can still meet an old text-typed value convert it instead of throwing.
+
+### 2026-10-30 — Stop leaves the queue's job alone, and nothing that touches disk draws
+Pressing Stop nulled the job the batch compares itself against, so its `finally` never stopped the
+foreground service and the "Saving videos" notification stayed on screen for good. Stop now only
+cancels; the batch that ends is the one that puts its notification down.
+
+Comment rows, the Settings numbers and the sheet's picture lookups were reading folders on the thread
+that draws — the same class of stall the 2026-10-25 entry killed elsewhere. They are read off-main and
+the screen repaints when the answer lands. The shared author/stat tables are now mutated and persisted
+inside one lock, because several pages used to write the copy they each read.
+
+*Killed:* rebuilding the feed adapter on a rescan (it restarted the playing clip — `swapTo` already
+existed for that), `onDraw`-time guesses at which picture is missing, and a second `.nomedia`-less
+frames folder that a gallery would index.
+
 ## Measured, from a real request (2026-10-20)
 
 `https://www.tikwm.com/api/?url=<video>&hd=1` → 200, 7.2 KB, 2.1 s: `duration`, `size`, `hd_size`,

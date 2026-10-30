@@ -44,8 +44,8 @@ object Downloads {
     /** Set by whichever screen is on top; null while none is. */
     @Volatile private var listener: ((State) -> Unit)? = null
 
-    /** The notification is redrawn at most every 10%, not on every progress tick. */
-    private var lastNote = -1
+    /** The notification only ever shows done/total, so that is the only thing worth redrawing on. */
+    @Volatile private var lastNote = -1
 
     /** Kept so the progress notification can be updated without a screen. */
     @Volatile private var app: Context? = null
@@ -60,9 +60,8 @@ object Downloads {
 
     private fun publish(next: State) {
         state = next
-        val bucket = next.done * 100 + next.percent / 10
-        if (bucket != lastNote) {
-            lastNote = bucket
+        if (next.done != lastNote) {
+            lastNote = next.done
             app?.let { ctx -> DownloadService.progress(ctx, next.done, next.total) }
         }
         val fn = listener ?: return
@@ -71,8 +70,10 @@ object Downloads {
 
     fun stop() {
         if (job?.isActive != true) return
+        // The job is left in place: the loop's finally block compares itself against it to decide
+        // whether the notification belongs to this batch, and nulling it here would keep the
+        // ongoing notification on screen for good.
         job?.cancel()
-        job = null
         publish(state.copy(running = false, current = "", percent = 0))
     }
 
@@ -85,6 +86,7 @@ object Downloads {
         DownloadService.start(application, clips.size)
         publish(State(running = true, total = clips.size))
         job = scope.launch {
+            val mine = coroutineContext[Job]
             var done = 0
             var failed = 0
             var savedId = ""
@@ -115,7 +117,12 @@ object Downloads {
                 publish(State(running = false, done = done, total = clips.size, failed = failed,
                     savedId = savedId, lastSaved = lastSaved))
             } finally {
-                DownloadService.stop(application)
+                // A stopped batch can unwind after a new one has already started; it must not take
+                // the new batch's notification down with it.
+                if (job === mine) {
+                    job = null
+                    DownloadService.stop(application)
+                }
             }
         }
     }

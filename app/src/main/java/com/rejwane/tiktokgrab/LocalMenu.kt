@@ -111,10 +111,16 @@ object LocalMenu {
     }
 
     fun share(host: AppCompatActivity, clip: LocalVideo) {
-        val send = outward(host, clip) ?: return note(host, "Cannot share this file")
-        val intent = Intent(Intent.ACTION_SEND).apply {
-            type = "video/mp4"
-            putExtra(Intent.EXTRA_STREAM, send)
+        // A slideshow post is one clip holding several files, so all of them go out together.
+        val uris = (if (clip.photos.isNotEmpty()) clip.photos else listOf(clip.uri))
+            .mapNotNull { outward(host, it) }
+        if (uris.isEmpty()) return note(host, "Cannot share this file")
+        val intent = Intent(
+            if (uris.size > 1) Intent.ACTION_SEND_MULTIPLE else Intent.ACTION_SEND
+        ).apply {
+            type = mime(clip)
+            if (uris.size > 1) putParcelableArrayListExtra(Intent.EXTRA_STREAM, ArrayList(uris))
+            else putExtra(Intent.EXTRA_STREAM, uris.first())
             putExtra(Intent.EXTRA_TEXT, clip.caption)
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
@@ -123,17 +129,18 @@ object LocalMenu {
     }
 
     private fun openOutside(host: AppCompatActivity, clip: LocalVideo) {
-        val send = outward(host, clip) ?: return note(host, "No player for this file")
+        val send = outward(host, clip.uri) ?: return note(host, "No player for this file")
         val intent = Intent(Intent.ACTION_VIEW).apply {
-            setDataAndType(send, "video/mp4")
+            setDataAndType(send, mime(clip))
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
         runCatching { host.startActivity(intent) }.onFailure { note(host, "No player for this file") }
     }
 
+    private fun mime(clip: LocalVideo) = if (clip.isPhoto) "image/jpeg" else "video/mp4"
+
     /** Other apps are not allowed a file:// address, so our own folder leaves through a provider. */
-    private fun outward(host: AppCompatActivity, clip: LocalVideo): Uri? {
-        val uri = clip.uri
+    private fun outward(host: AppCompatActivity, uri: Uri): Uri? {
         if (uri.scheme != "file") return uri
         val file = uri.path?.let { java.io.File(it) } ?: return null
         return runCatching {
@@ -142,8 +149,9 @@ object LocalMenu {
     }
 
     private fun openOnTikTok(host: AppCompatActivity, clip: LocalVideo) {
+        val kind = if (clip.isPhoto) "photo" else "video"
         val page = if (clip.clipId.isBlank()) "https://www.tiktok.com/@${clip.author}"
-        else "https://www.tiktok.com/@${clip.author}/video/${clip.clipId}"
+        else "https://www.tiktok.com/@${clip.author}/$kind/${clip.clipId}"
         runCatching { host.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(page))) }
             .onFailure { note(host, "No browser for this link") }
     }

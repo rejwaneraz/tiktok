@@ -28,24 +28,34 @@ class TikTokWeb(private val activity: Activity) {
     /** True while a page is loading, which is exactly when the WebView must not be torn down. */
     @Volatile private var busy = false
 
+    /** Set when the screen threw this away: a read still polling must not build another WebView on it. */
+    @Volatile private var gone = false
+
     @SuppressLint("SetJavaScriptEnabled")
-    private fun view(): WebView = web ?: WebView(activity).apply {
-        settings.javaScriptEnabled = true
-        settings.domStorageEnabled = true
-        // The browser's own identity is kept: claiming to be desktop Chrome while the engine says
-        // otherwise is exactly what TikTok's check page then refuses to let through.
-        webViewClient = object : WebViewClient() {
-            // TikTok tries to jump into its own app (snssdk1233://…). Swallow it: opening the app
-            // would yank the user out of ours, and the failed load would also wipe this page.
-            override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
-                val scheme = request.url?.scheme ?: return true
-                return scheme != "http" && scheme != "https"
+    private fun view(): WebView {
+        // Never build a page onto a screen that has already thrown this away.
+        if (gone) throw kotlinx.coroutines.CancellationException("this screen was closed")
+        web?.let { return it }
+        val built = WebView(activity).apply {
+            settings.javaScriptEnabled = true
+            settings.domStorageEnabled = true
+            // The browser's own identity is kept: claiming to be desktop Chrome while the engine says
+            // otherwise is exactly what TikTok's check page then refuses to let through.
+            webViewClient = object : WebViewClient() {
+                // TikTok tries to jump into its own app (snssdk1233://…). Swallow it: opening the app
+                // would yank the user out of ours, and the failed load would also wipe this page.
+                override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
+                    val scheme = request.url?.scheme ?: return true
+                    return scheme != "http" && scheme != "https"
+                }
             }
+            // An unattached WebView may never render, so the page's own data would never appear.
+            alpha = 0f
+            activity.findViewById<ViewGroup>(android.R.id.content)
+                .addView(this, ViewGroup.LayoutParams(2, 2))
         }
-        // An unattached WebView may never render, so the page's own data would never appear.
-        alpha = 0f
-        activity.findViewById<ViewGroup>(android.R.id.content).addView(this, ViewGroup.LayoutParams(2, 2))
-        web = this
+        web = built
+        return built
     }
 
     fun url(): String = web?.url ?: ""
@@ -58,6 +68,9 @@ class TikTokWeb(private val activity: Activity) {
             val deadline = started + 50000
             var nudged = false
             while (System.currentTimeMillis() < deadline) {
+                // The screen went away underneath this read. Cancellation, not failure: the caller
+                // must not blame the login for a page the user simply closed.
+                if (gone) throw kotlinx.coroutines.CancellationException("this screen was closed")
                 delay(900)
                 // The previous profile stays in the DOM while a load fails, so never trust stale data.
                 if (url().contains("/@$user", true) && pageData().isNotBlank()) return
@@ -96,12 +109,15 @@ class TikTokWeb(private val activity: Activity) {
     }
 
     fun destroy() {
+        gone = true
         val current = web ?: return
         web = null
         (current.parent as? ViewGroup)?.removeView(current)
         runCatching { current.stopLoading() }
         // A WebView torn down while it is still loading dies in native code and takes the app with
-        // it, so a busy one is only unhooked here and left to the system.
-        if (!busy) runCatching { current.destroy() }
+        // it, so the load is stopped first and the page is destroyed once that has landed. Leaving
+        // it alive instead is how every interrupted profile read leaked one WebView.
+        if (busy) main.postDelayed({ runCatching { current.destroy() } }, 800)
+        else runCatching { current.destroy() }
     }
 }

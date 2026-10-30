@@ -39,7 +39,9 @@ data class LocalVideo(
     val bytes: Long,
     val durationMs: Long,
     val addedAt: Long,
-    val isPhoto: Boolean = false
+    val isPhoto: Boolean = false,
+    /** Every picture of a slideshow post, in order; a video carries none. */
+    val photos: List<Uri> = emptyList()
 ) {
     val key: String get() = uri.toString()
 
@@ -102,8 +104,31 @@ object LocalVideos {
     /** The library folder itself: one place for every video, whatever the caption or the profile. */
     private fun vault(context: Context): List<LocalVideo> {
         if (!Vault.granted(context)) return emptyList()
-        return Vault.list(context).map { file ->
-            val clipId = Regex("\\[(\\d+)]").find(file.name)?.groupValues?.get(1) ?: ""
+        val files = Vault.list(context)
+        // The pictures of one slideshow post share its clip id, so they are one clip here rather than
+        // fourteen: the first is the tile, the whole set travels with it.
+        val posts = files.filter { isPicture(it.name) && clipIdOf(it.name).isNotBlank() }
+            .groupBy { clipIdOf(it.name) }
+        val used = HashSet(posts.values.flatten())
+        val out = ArrayList<LocalVideo>()
+        posts.forEach { (clipId, set) ->
+            val ordered = set.sortedBy { pictureIndex(it.name) }
+            val first = ordered.first()
+            out.add(LocalVideo(
+                uri = Uri.fromFile(first),
+                name = first.name,
+                caption = Vault.captionOf(context, clipId).ifBlank { captionOf(first.name) },
+                clipId = clipId,
+                author = Vault.authorOf(context, clipId, ""),
+                bytes = ordered.sumOf { it.length() },
+                durationMs = 0L,
+                addedAt = ordered.maxOf { it.lastModified() } / 1000,
+                isPhoto = true,
+                photos = ordered.map { Uri.fromFile(it) }
+            ))
+        }
+        out.addAll(files.filterNot { used.contains(it) }.map { file ->
+            val clipId = clipIdOf(file.name)
             val caption = Vault.captionOf(context, clipId).ifBlank { captionOf(file.name) }
             LocalVideo(
                 uri = Uri.fromFile(file),
@@ -114,12 +139,19 @@ object LocalVideos {
                 bytes = file.length(),
                 durationMs = 0L,
                 addedAt = file.lastModified() / 1000,
-                // A picture of a photo post lives in the same folder and keeps the same name shape;
-                // the extension is what tells the two apart.
-                isPhoto = isPicture(file.name)
+                // A picture that arrived on its own (no clip id to group it by) is still a picture.
+                isPhoto = isPicture(file.name),
+                photos = if (isPicture(file.name)) listOf(Uri.fromFile(file)) else emptyList()
             )
-        }
+        })
+        return out
     }
+
+    private fun clipIdOf(name: String) = Regex("\\[(\\d+)]").find(name)?.groupValues?.get(1) ?: ""
+
+    /** " p12." sorts after " p2." only when the number is read as a number. */
+    private fun pictureIndex(name: String) = Regex(" p(\\d+)\\.").find(name)?.groupValues
+        ?.get(1)?.toIntOrNull() ?: 1
 
     /**
      * For You order. With `fresh` the roll happens again — TikTok gives a new feed every time it
@@ -131,15 +163,15 @@ object LocalVideos {
         val saved = if (fresh) JSONObject() else runCatching { JSONObject(prefs.getString("order", "{}")) }
             .getOrDefault(JSONObject())
         val dice = HashMap<String, Double>()
-        var fresh = false
+        var rolled = false
         for (video in videos) {
             val roll = if (saved.has(video.key)) saved.optDouble(video.key, -1.0) else -1.0
             if (roll < 0) {
                 dice[video.key] = Math.random()
-                fresh = true
+                rolled = true
             } else dice[video.key] = roll
         }
-        if (fresh) {
+        if (rolled) {
             val order = JSONObject()
             dice.forEach { (key, value) -> order.put(key, value) }
             prefs.edit().putString("order", order.toString()).apply()
@@ -225,11 +257,21 @@ object LocalVideos {
     private fun Cursor.index(column: String) = getColumnIndexOrThrow(column)
 
     fun delete(context: Context, video: LocalVideo): Boolean {
-        val gone = runCatching {
-            if (video.uri.scheme == "file") video.uri.path?.let { File(it).delete() } ?: false
-            else context.contentResolver.delete(video.uri, null, null) > 0
-        }.getOrDefault(false)
-        if (gone) Downloader.forget(context, video.clipId)
+        val targets = if (video.photos.size > 1) video.photos else listOf(video.uri)
+        var gone = false
+        targets.forEach { uri ->
+            val removed = runCatching {
+                if (uri.scheme == "file") uri.path?.let { File(it).delete() } ?: false
+                else context.contentResolver.delete(uri, null, null) > 0
+            }.getOrDefault(false)
+            gone = gone || removed
+        }
+        // The clip is only "not downloaded" once none of its files are left — one picture out of a
+        // fourteen-picture post must not put the whole post back on the download list.
+        val left = runCatching {
+            Vault.list(context).any { it.isFile && clipIdOf(it.name) == video.clipId }
+        }.getOrDefault(true)
+        if (gone && !left) Downloader.forget(context, video.clipId)
         return gone
     }
 
@@ -253,6 +295,9 @@ object LocalThumbs {
 
     /** Reading the file once gives both the cover frame and the length MediaStore withholds. */
     fun into(cover: ImageView, badge: TextView?, video: LocalVideo, context: Context) {
+        // Claim the cell first: every early return below still has to stop a frame that an earlier
+        // clip is decoding, or that late bitmap lands on the wrong tile.
+        cover.tag = video.key
         if (video.isPhoto) {
             // A picture is already a picture: no frame to seek, no duration to read.
             cover.load(video.uri) { crossfade(false) }
@@ -266,7 +311,6 @@ object LocalThumbs {
             badge?.text = views.ifBlank { clock(video) }
             return
         }
-        cover.tag = video.key
         cover.setImageDrawable(null)
         badge?.text = views
         pool.execute {

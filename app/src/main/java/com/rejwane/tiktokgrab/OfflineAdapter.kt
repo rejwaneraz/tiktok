@@ -31,6 +31,9 @@ class OfflineAdapter(
         fun onComments(video: LocalVideo)
         fun onShare(video: LocalVideo)
 
+        /** A slideshow post is one clip holding many pictures; a tap opens them all. */
+        fun onOpenPhotos(video: LocalVideo)
+
         /** Every horizontal or vertical decision is made in one place: returns true when we took the drag. */
         fun onDrag(event: MotionEvent, page: View): Boolean
     }
@@ -70,6 +73,7 @@ class OfflineAdapter(
         private var ready = false
         private var expanded = false
         private var current: LocalVideo? = null
+        private var sink: Listener? = null
         private val tapper = GestureDetector(itemView.context,
             object : GestureDetector.SimpleOnGestureListener() {
                 override fun onSingleTapConfirmed(event: MotionEvent): Boolean {
@@ -107,6 +111,9 @@ class OfflineAdapter(
                 photo.load(clip.uri) { crossfade(false) }
                 ready = true
                 pauseIcon.visibility = View.GONE
+                val many = if (clip.photos.size > 1) " · ${clip.photos.size} pictures" else ""
+                meta.text = "${clip.day()}$many · ${clip.size()}"
+                bar.progress = 0
                 return
             }
             video.setOnPreparedListener { mp ->
@@ -169,6 +176,7 @@ class OfflineAdapter(
 
         /** The page reports touches; the activity decides. Never a click here, or a drag becomes a tap. */
         fun watch(listener: Listener) {
+            sink = listener
             itemView.setOnTouchListener { page, event ->
                 tapper.onTouchEvent(event)
                 listener.onDrag(event, page)
@@ -233,7 +241,12 @@ class OfflineAdapter(
         }
 
         fun playOrPause() {
-            if (current?.isPhoto == true) return
+            val clip = current ?: return
+            if (clip.isPhoto) {
+                // Nothing to pause on a picture: the tap opens the whole set instead.
+                if (clip.photos.size > 1) sink?.onOpenPhotos(clip)
+                return
+            }
             if (ready && video.isPlaying) pause() else start()
         }
 

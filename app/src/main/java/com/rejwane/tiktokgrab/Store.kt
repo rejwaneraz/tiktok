@@ -76,34 +76,39 @@ object Store {
         val rows = runCatching {
             context.contentResolver.query(
                 MediaStore.Downloads.EXTERNAL_CONTENT_URI,
-                arrayOf(MediaStore.MediaColumns._ID, MediaStore.MediaColumns.DISPLAY_NAME),
+                arrayOf(MediaStore.MediaColumns._ID, MediaStore.MediaColumns.DISPLAY_NAME,
+                    MediaStore.MediaColumns.SIZE),
                 "${MediaStore.MediaColumns.RELATIVE_PATH} LIKE ?",
                 arrayOf("${relative(folder)}/%"), null
             )?.use { c ->
-                val out = ArrayList<Pair<Long, String>>()
-                while (c.moveToNext()) {
-                    if (c.getColumnCount() < 2) break
-                    out.add(c.getLong(0) to (c.getString(1) ?: ""))
-                }
+                val out = ArrayList<Triple<Long, String, Long>>()
+                while (c.moveToNext()) out.add(Triple(c.getLong(0), c.getString(1) ?: "", c.getLong(2)))
                 out
             }
         }.getOrNull().orEmpty()
         if (rows.isEmpty()) return
         val dir = plainDir(context, folder).apply { mkdirs() }
-        rows.forEach { (id, name) ->
+        rows.forEach { (id, name, bytes) ->
             val uri = Uri.withAppendedPath(MediaStore.Downloads.EXTERNAL_CONTENT_URI, id.toString())
             val to = File(dir, onDisk(name.ifBlank { "$folder$id.jpg" }))
             if (to.isFile && to.length() > 0) {
                 runCatching { context.contentResolver.delete(uri, null, null) }
                 return@forEach
             }
+            // The row is dropped only over a file that holds exactly the bytes the row promised —
+            // a copy that stopped half way used to leave the picture in neither place.
+            val temp = File(to.absolutePath + ".part")
             val copied = runCatching {
                 context.contentResolver.openInputStream(uri)?.use { input ->
-                    to.outputStream().use { out -> input.copyTo(out) }
-                }
-                true
-            }.getOrDefault(false) && to.length() > 0
-            if (copied) runCatching { context.contentResolver.delete(uri, null, null) }
+                    temp.outputStream().use { out -> input.copyTo(out) }
+                } != null && temp.length() > 0 && (bytes <= 0L || temp.length() == bytes) &&
+                    temp.renameTo(to)
+            }.getOrDefault(false)
+            if (!copied) {
+                runCatching { temp.delete() }
+                return@forEach
+            }
+            runCatching { context.contentResolver.delete(uri, null, null) }
         }
         runCatching { if (!File(dir, ".nomedia").exists()) File(dir, ".nomedia").createNewFile() }
     }

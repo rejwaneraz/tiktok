@@ -77,8 +77,11 @@ object Comments {
     /**
      * Up to LIMIT comments for one clip, written back page by page so stopping half way still keeps
      * what came. Blocking — call it off the main thread.
+     *
+     * `photo` matters: a slideshow post lives at /photo/<id>, and the reader has never heard of the
+     * /video/<id> address we would otherwise ask it about.
      */
-    fun fetch(context: Context, clipId: String): Fetched {
+    fun fetch(context: Context, clipId: String, photo: Boolean = false): Fetched {
         if (clipId.isBlank()) return Fetched(emptyList(), true)
         var kept = load(context, clipId)
         var cursor = 0L
@@ -88,7 +91,7 @@ object Comments {
         while (kept.size < LIMIT && pages < 8) {
             pages++
             pace()
-            val body = runCatching { JSONObject(Http.openGet(page(clipId, cursor))) }.getOrNull()
+            val body = runCatching { JSONObject(Http.openGet(page(clipId, cursor, photo))) }.getOrNull()
                 ?: break
             val code = body.optInt("code", 0)
             // "code 0" is the reader saying "here is the clip". A one-per-second refusal is pacing,
@@ -102,8 +105,16 @@ object Comments {
                 }
                 break
             }
+            // A page that got through means the reader is answering again, so the throttle budget
+            // is handed back — otherwise the third limit in a long walk ends it in silence.
+            retries = 0
+            val data = body.optJSONObject("data")
+            if (data == null) {
+                // code 0 with no body is the reader admitting it knows nothing about this clip; that
+                // is a failed read, not a clip with zero comments.
+                break
+            }
             answered = true
-            val data = body.optJSONObject("data") ?: break
             val batch = data.optJSONArray("comments") ?: JSONArray()
             if (batch.length() == 0) break
             kept = merge(context, clipId, (0 until batch.length()).mapNotNull { i ->
@@ -117,13 +128,16 @@ object Comments {
 
     /** Spacing is per request, not per clip: a batch of single-page clips must stay slow too. */
     private fun pace() {
-        val since = System.currentTimeMillis() - lastCall
-        if (since < PAUSE_MS) runCatching { Thread.sleep(PAUSE_MS - since) }
-        lastCall = System.currentTimeMillis()
+        synchronized(this) {
+            val since = System.currentTimeMillis() - lastCall
+            if (since < PAUSE_MS) runCatching { Thread.sleep(PAUSE_MS - since) }
+            lastCall = System.currentTimeMillis()
+        }
     }
 
-    private fun page(clipId: String, cursor: Long) =
-        "$BASE?url=https://www.tiktok.com/@v/video/$clipId&count=$PAGE&cursor=$cursor"
+    private fun page(clipId: String, cursor: Long, photo: Boolean) =
+        "$BASE?url=https://www.tiktok.com/@v/${if (photo) "photo" else "video"}/$clipId" +
+            "&count=$PAGE&cursor=$cursor"
 
     private fun parse(context: Context, clipId: String, item: JSONObject): Comment? {
         val id = item.optString("id")
@@ -181,18 +195,6 @@ object Comments {
             Store.find(context, PHOTOS, photoName(clipId, comment.id, i))
         }
     }
-
-    /** True while at least one picture this comment carries is not on disk yet. */
-    fun hasMissingPictures(context: Context, clipId: String, comment: Comment): Boolean {
-        if (comment.photoUrls.isEmpty()) return false
-        return comment.photoUrls.indices.any { i ->
-            Store.find(context, PHOTOS, photoName(clipId, comment.id, i)) == null
-        }
-    }
-
-    /** Comments that say they carry pictures we have not put on disk yet. */
-    fun pendingPictures(context: Context, clipId: String, comments: List<Comment>): List<Comment> =
-        comments.filter { hasMissingPictures(context, clipId, it) }
 
     /** Accepts a bare string, an array of strings, or an array of objects that carry one. */
     private fun allUrls(value: Any?): List<String> = when (value) {

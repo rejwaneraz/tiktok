@@ -41,32 +41,56 @@ object CommentSheet {
 
         var rows: CommentAdapter? = null
 
-        fun paint(comments: List<Comment>, message: String = "") {
-            val shown = if (total > 0) GridAdapter.short(total) else comments.size.toString()
-            title.text = "$shown ${host.getString(R.string.comments_suffix)}"
-            note.text = message
-            note.visibility = if (message.isBlank()) View.GONE else View.VISIBLE
-            val adapter = CommentAdapter(comments, video.clipId) { comment ->
+        /** One comment's pictures landed: read them off-main, then repaint only that row. */
+        fun refresh(commentId: String) {
+            val adapter = rows ?: return
+            val at = adapter.indexOf(commentId)
+            val comment = adapter.commentAt(at) ?: return
+            host.lifecycleScope.launch {
+                val found = withContext(Dispatchers.IO) {
+                    Comments.pictures(host, video.clipId, comment)
+                }
+                adapter.putPictures(commentId, found)
+                adapter.notifyItemChanged(at)
+            }
+        }
+
+        /**
+         * Comments and the pictures already on disk come from the folder, so they are read off the
+         * frame thread — a sheet that lists its rows while the disk answers is a sheet that stutters.
+         */
+        fun paint(read: Pair<List<Comment>, Map<String, List<android.net.Uri>>>, message: String = "") {
+            val comments = read.first
+            val adapter = CommentAdapter(comments, read.second) { comment ->
                 // Pictures are the only part of a comment that costs real data, so they come down
                 // when the reader asks for them and not a moment before.
                 host.lifecycleScope.launch {
                     val got = withContext(Dispatchers.IO) {
                         Comments.downloadPhotos(host, video.clipId, comment)
                     }
-                    if (got) rows?.photoReady(comment.id)
+                    if (got) refresh(comment.id)
                 }
             }
             rows = adapter
             list.adapter = adapter
+            val shown = if (total > 0) GridAdapter.short(total) else comments.size.toString()
+            title.text = "$shown ${host.getString(R.string.comments_suffix)}"
+            note.text = message
+            note.visibility = if (message.isBlank()) View.GONE else View.VISIBLE
+
             // A picture is part of reading the comment, so it comes down when the sheet opens —
-            // missing ones only, once, and never during a batch fetch.
-            val pending = Comments.pendingPictures(host, video.clipId, comments)
+            // every picture still missing, once, and never during a batch fetch. A comment that got
+            // two of its four before the signal went must still be topped up.
+            val pending = comments.filter {
+                it.photoUrls.isNotEmpty() &&
+                    read.second[it.id].orEmpty().size < it.photoUrls.size
+            }
             if (pending.isNotEmpty()) {
                 host.lifecycleScope.launch {
                     withContext(Dispatchers.IO) {
                         pending.forEach { comment ->
                             if (Comments.downloadPhotos(host, video.clipId, comment)) {
-                                withContext(Dispatchers.Main) { rows?.photoReady(comment.id) }
+                                withContext(Dispatchers.Main) { refresh(comment.id) }
                             }
                         }
                     }
@@ -74,16 +98,18 @@ object CommentSheet {
             }
         }
 
-        val saved = Comments.load(host, video.clipId)
-        when {
-            saved.isNotEmpty() -> paint(saved)
-            video.clipId.isBlank() -> paint(saved, host.getString(R.string.comments_no_id))
-            else -> {
-                paint(saved, host.getString(R.string.comments_loading))
-                host.lifecycleScope.launch {
+        host.lifecycleScope.launch {
+            val saved = withContext(Dispatchers.IO) { Comments.load(host, video.clipId) }
+            when {
+                saved.isNotEmpty() -> paint(saved to pictures(host, video.clipId, saved))
+                video.clipId.isBlank() ->
+                    paint(saved to pictures(host, video.clipId, saved), host.getString(R.string.comments_no_id))
+                else -> {
+                    paint(saved to pictures(host, video.clipId, saved),
+                        host.getString(R.string.comments_loading))
                     val answered = runCatching { pull(video) }.getOrDefault(false)
-                    val kept = Comments.load(host, video.clipId)
-                    paint(kept, when {
+                    val kept = withContext(Dispatchers.IO) { Comments.load(host, video.clipId) }
+                    paint(kept to pictures(host, video.clipId, kept), when {
                         kept.isNotEmpty() -> ""
                         answered -> host.getString(R.string.comments_none)
                         else -> host.getString(R.string.comments_unreachable)
@@ -93,6 +119,13 @@ object CommentSheet {
         }
         dialog.show()
     }
+
+    /** The comments plus every picture of theirs already on disk, read together off the frame thread. */
+    private suspend fun pictures(context: Context, clipId: String,
+                                 comments: List<Comment>): Map<String, List<android.net.Uri>> =
+        withContext(Dispatchers.IO) {
+            comments.associate { it.id to Comments.pictures(context, clipId, it) }
+        }
 
     /**
      * The online preview has no file yet, so the same sheet is opened over a clip id — its own
@@ -108,14 +141,20 @@ object CommentSheet {
 
 class CommentAdapter(
     private val items: List<Comment>,
-    private val clipId: String,
+    photos: Map<String, List<android.net.Uri>>,
     private val onPhoto: (Comment) -> Unit
 ) : RecyclerView.Adapter<CommentAdapter.Holder>() {
 
-    /** The tapped picture has landed on disk: repaint just that row. */
-    fun photoReady(commentId: String) {
-        val at = items.indexOfFirst { it.id == commentId }
-        if (at >= 0) notifyItemChanged(at)
+    // Held as a mutable copy: a picture that lands while the sheet is open has to reach its row.
+    private val photos = HashMap(photos)
+
+    fun indexOf(commentId: String) = items.indexOfFirst { it.id == commentId }
+
+    fun commentAt(index: Int): Comment? = items.getOrNull(index)
+
+    /** The tapped picture has landed on disk: remember it and let the caller repaint the row. */
+    fun putPictures(commentId: String, uris: List<android.net.Uri>) {
+        photos[commentId] = uris
     }
 
     class Holder(view: View) : RecyclerView.ViewHolder(view) {
@@ -175,19 +214,19 @@ class CommentAdapter(
         holder.likes.text = if (comment.likes > 0) GridAdapter.short(comment.likes) else ""
 
         holder.photos.removeAllViews()
-        // Read from the folder, not from the JSON: a picture downloaded a second ago must show up
-        // without waiting for the comment file to be written again.
-        val saved = Comments.pictures(context, clipId, comment)
-        when {
-            saved.isNotEmpty() -> {
-                holder.photosScroll.visibility = View.VISIBLE
-                saved.forEach { uri -> holder.photos.addView(picture(context, uri, comment)) }
+        // Read from the folder when the sheet opened, not per row: the map was filled off the frame
+        // thread, and a picture that lands afterwards repaints its own row.
+        val saved = photos[comment.id].orEmpty()
+        // One slot per picture the comment carries: the ones on disk show, the ones still missing
+        // show as a tappable square, so a partly-downloaded comment never hides its own rest.
+        val slots = maxOf(saved.size, comment.photoUrls.size)
+        if (slots == 0) {
+            holder.photosScroll.visibility = View.GONE
+        } else {
+            holder.photosScroll.visibility = View.VISIBLE
+            (0 until slots).forEach { i ->
+                holder.photos.addView(picture(context, saved.getOrNull(i), comment))
             }
-            comment.photoUrls.isNotEmpty() -> {
-                holder.photosScroll.visibility = View.VISIBLE
-                comment.photoUrls.forEach { _ -> holder.photos.addView(picture(context, null, comment)) }
-            }
-            else -> holder.photosScroll.visibility = View.GONE
         }
 
         fun paintHeart(on: Boolean) {

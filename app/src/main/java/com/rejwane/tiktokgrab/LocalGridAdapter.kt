@@ -66,7 +66,9 @@ class LocalGridAdapter(
         holder.root.setOnClickListener {
             if (selectMode) {
                 if (!selected.add(key)) selected.remove(key)
-                notifyItemChanged(position)
+                // Re-read the row at tap time: pages can arrive and re-sort between bind and finger.
+                val at = holder.bindingAdapterPosition
+                if (at != RecyclerView.NO_POSITION) notifyItemChanged(at)
                 onToggled()
             } else {
                 onOpen(clip)

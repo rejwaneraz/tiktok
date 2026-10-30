@@ -38,27 +38,53 @@ object FrameExport {
     suspend fun export(context: Context, videos: List<LocalVideo>,
                        onProgress: (Int, Int, String) -> Unit): Int {
         if (!Vault.granted(context)) return -1
-        val base = folder(context)
+        val base = folder(context).apply { mkdirs() }
+        hide(base)
         var written = 0
         videos.forEachIndexed { index, video ->
             coroutineContext.ensureActive()
             val key = ClipTags.key(video.clipId, video.name)
             val tag = ClipTags.of(context, key).firstOrNull()?.let { safe(it) } ?: "_untagged"
-            val target = File(File(base, tag).apply { mkdirs() }, "${key.replace(':', '_')}.jpg")
+            val dir = File(base, tag).apply { mkdirs() }
+            hide(dir)
+            val target = File(dir, "${key.replace(':', '_')}.jpg")
             onProgress(index + 1, videos.size, tag)
             if (target.isFile && target.length() > 0) return@forEachIndexed
-            val frame = frameOf(context, video) ?: return@forEachIndexed
-            runCatching {
-                target.outputStream().use { out -> frame.compress(Bitmap.CompressFormat.JPEG, QUALITY, out) }
-                written++
-            }
-            frame.recycle()
+            // Nothing is counted as written until the file is standing there complete: a JPEG that
+            // failed halfway used to be tallied up and then skipped forever.
+            val temp = File(target.absolutePath + ".part")
+            val ok = runCatching {
+                val made = if (video.isPhoto) {
+                    // A slideshow post is already a picture — its own bytes are the best frame for it.
+                    val path = (video.photos.firstOrNull() ?: video.uri).path.orEmpty()
+                    if (path.isBlank()) false else { File(path).copyTo(temp, overwrite = true); true }
+                } else {
+                    val frame = frameOf(context, video)
+                    if (frame == null) false else try {
+                        temp.outputStream().use { out ->
+                            frame.compress(Bitmap.CompressFormat.JPEG, QUALITY, out)
+                        }
+                    } finally {
+                        frame.recycle()
+                    }
+                }
+                made && temp.length() > 0 && temp.renameTo(target)
+            }.getOrDefault(false)
+            if (ok) written++ else runCatching { temp.delete() }
         }
         return written
     }
 
-    private fun safe(name: String) =
-        name.filterNot { it in "<>:\"/\\|?*" }.trim().ifBlank { "_untagged" }
+    /** A gallery must not pick up the training set, so every folder it lands in is marked. */
+    private fun hide(dir: File) {
+        runCatching { if (!File(dir, ".nomedia").exists()) File(dir, ".nomedia").createNewFile() }
+    }
+
+    /** A tag is a folder name, so dots and path characters are removed — and ".." becomes nothing. */
+    private fun safe(name: String): String {
+        val cleaned = name.filterNot { it in "<>:\"/\\|?*" }.trim().trim('.')
+        return if (cleaned.isBlank()) "_untagged" else cleaned
+    }
 
     private fun frameOf(context: Context, video: LocalVideo): Bitmap? {
         val retriever = MediaMetadataRetriever()

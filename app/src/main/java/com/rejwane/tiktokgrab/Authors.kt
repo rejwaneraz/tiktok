@@ -63,20 +63,24 @@ object Authors {
             avatarBig: String = "", following: Long = 0L, followers: Long = 0L, likes: Long = 0L,
             signature: String = "") {
         if (user.isBlank()) return
-        val root = read(context)
-        val old = root.optJSONObject(user) ?: JSONObject()
-        val merged = JSONObject()
-            .put("nickname", nickname.ifBlank { old.optString("nickname") })
-            .put("avatar", avatar.ifBlank { old.optString("avatar") })
-            .put("avatarBig", avatarBig.ifBlank { old.optString("avatarBig") })
-            .put("following", maxOf(following, old.optLong("following")))
-            .put("followers", maxOf(followers, old.optLong("followers")))
-            .put("likes", maxOf(likes, old.optLong("likes")))
-            .put("signature", signature.ifBlank { old.optString("signature") })
-        if (old.length() > 0 && old.toString() == merged.toString()) return
-        root.put(user, merged)
-        prefs(context).edit().putString(KEY, root.toString()).apply()
-        synchronized(this) { cache = null }
+        // One lock for read + merge + write: several authors are captured while a listing streams in,
+        // and each of them used to write the table it read before the others landed.
+        synchronized(this) {
+            val root = read(context)
+            val old = root.optJSONObject(user) ?: JSONObject()
+            val merged = JSONObject()
+                .put("nickname", nickname.ifBlank { old.optString("nickname") })
+                .put("avatar", avatar.ifBlank { old.optString("avatar") })
+                .put("avatarBig", avatarBig.ifBlank { old.optString("avatarBig") })
+                .put("following", maxOf(following, old.optLong("following")))
+                .put("followers", maxOf(followers, old.optLong("followers")))
+                .put("likes", maxOf(likes, old.optLong("likes")))
+                .put("signature", signature.ifBlank { old.optString("signature") })
+            if (old.length() > 0 && old.toString() == merged.toString()) return
+            root.put(user, merged)
+            prefs(context).edit().putString(KEY, root.toString()).apply()
+            cache = null
+        }
     }
 
     /** The author object TikTok ships inside every item of the video list. */

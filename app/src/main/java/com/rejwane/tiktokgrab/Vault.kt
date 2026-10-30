@@ -30,6 +30,9 @@ object Vault {
     private const val PREF = "saved"
     private const val KEY = "files"
 
+    /** How old a half-written .part has to be before a scan is allowed to remove it. */
+    private const val STALE_PART_MS = 30 * 60 * 1000L
+
     private fun prefs(context: Context) = context.getSharedPreferences(PREF, Context.MODE_PRIVATE)
 
     /** Can we write into Downloads ourselves? On Android 11+ that is the "All files access" switch. */
@@ -88,7 +91,9 @@ object Vault {
     fun file(context: Context, caption: String, clipId: String): File {
         val base = "${LocalVideos.sanitize(caption).take(60)} [$clipId]$EXT"
         val first = File(dir(context), base)
-        if (!first.exists()) return first
+        // The id is in the name, so a file already sitting there is this same clip coming back —
+        // a second copy of it under " (2)" would be two library rows for one clip.
+        if (first.exists() && clipId.isNotBlank()) return first
         var n = 2
         while (true) {
             val next = File(dir(context), base.substringBeforeLast("$EXT") + " ($n)$EXT")
@@ -114,6 +119,13 @@ object Vault {
         folder.listFiles()?.forEach { file ->
             if (!file.isFile) return@forEach
             val name = file.name
+            // A download that died leaves its half-written .part behind. Only ones nobody could still
+            // be writing are swept, so a download in flight is never cut off.
+            if (name.endsWith(".part")) {
+                if (System.currentTimeMillis() - file.lastModified() > STALE_PART_MS)
+                    runCatching { file.delete() }
+                return@forEach
+            }
             if (name == ".nomedia" || name.endsWith(EXT)) return@forEach
             if (!name.endsWith(".tgr") && !name.endsWith(".mp4")) return@forEach
             val target = File(folder, name.substringBeforeLast('.') + EXT)
@@ -125,9 +137,13 @@ object Vault {
 
     fun record(context: Context, clipId: String, author: String, caption: String) {
         if (clipId.isBlank()) return
-        val root = table(context)
-        root.put(clipId, JSONArray().put(author).put(caption))
-        prefs(context).edit().putString(KEY, root.toString()).apply()
+        // One lock for read + write: several downloads run at the same time, and the last one to
+        // finish used to overwrite the others' records with the table it read before they landed.
+        synchronized(this) {
+            val root = table(context)
+            root.put(clipId, JSONArray().put(author).put(caption))
+            prefs(context).edit().putString(KEY, root.toString()).apply()
+        }
     }
 
     fun captionOf(context: Context, clipId: String): String =
@@ -142,10 +158,12 @@ object Vault {
     /** "Move to profile" is a record now, so nothing about the file has to change. */
     fun setAuthor(context: Context, clipId: String, author: String): Boolean {
         if (clipId.isBlank()) return false
-        val root = table(context)
-        val old = root.optJSONArray(clipId)
-        root.put(clipId, JSONArray().put(author).put(old?.optString(1) ?: ""))
-        prefs(context).edit().putString(KEY, root.toString()).apply()
+        synchronized(this) {
+            val root = table(context)
+            val old = root.optJSONArray(clipId)
+            root.put(clipId, JSONArray().put(author).put(old?.optString(1) ?: ""))
+            prefs(context).edit().putString(KEY, root.toString()).apply()
+        }
         return true
     }
 
@@ -160,34 +178,45 @@ object Vault {
     fun migrateLegacy(context: Context): Int {
         if (!granted(context)) return 0
         var moved = 0
-        oldRows(context).forEach { (uri, name, folder) ->
-            val clipId = Regex("\\[(\\d+)]").find(name)?.groupValues?.get(1) ?: ""
-            val caption = name.removeSuffix(".mp4").substringBeforeLast('[').trim()
+        oldRows(context).forEach { row ->
+            val clipId = Regex("\\[(\\d+)]").find(row.name)?.groupValues?.get(1) ?: ""
+            val caption = row.name.removeSuffix(".mp4").substringBeforeLast('[').trim()
             // A half-finished move must not become two copies of the same clip.
             if (clipId.isNotBlank() && list(context).any { it.name.contains("[$clipId]") }) {
-                runCatching { context.contentResolver.delete(uri, null, null) }
+                runCatching { context.contentResolver.delete(row.uri, null, null) }
                 return@forEach
             }
-            val to = file(context, caption.ifBlank { "Video" }, clipId.ifBlank { name.hashCode().toString() })
+            val to = file(context, caption.ifBlank { "Video" }, clipId.ifBlank { row.name.hashCode().toString() })
+            // The row is only dropped once the library file holds every byte the row promised: a
+            // copy that stopped half way used to delete the original and lose the clip.
             val copied = runCatching {
-                context.contentResolver.openInputStream(uri)?.use { input ->
+                context.contentResolver.openInputStream(row.uri)?.use { input ->
                     to.outputStream().use { output -> input.copyTo(output) }
-                } != null && to.length() > 0
+                } != null && sameSize(to, row.bytes)
             }.getOrDefault(false)
-            if (!copied) return@forEach
-            if (clipId.isNotBlank()) Vault.record(context, clipId, folder, caption)
-            runCatching { context.contentResolver.delete(uri, null, null) }
+            if (!copied) {
+                runCatching { to.delete() }
+                return@forEach
+            }
+            if (clipId.isNotBlank()) Vault.record(context, clipId, row.folder, caption)
+            runCatching { context.contentResolver.delete(row.uri, null, null) }
             moved++
         }
         return moved
     }
 
+    /** True when the copy is exactly the size the row said it would be (or the row never said). */
+    private fun sameSize(file: File, expected: Long) =
+        file.length() > 0 && (expected <= 0L || file.length() == expected)
+
+    private data class LegacyRow(val uri: Uri, val name: String, val folder: String, val bytes: Long)
+
     /** MediaStore still holds the videos from the older builds of this app. */
-    private fun oldRows(context: Context): List<Triple<Uri, String, String>> {
+    private fun oldRows(context: Context): List<LegacyRow> {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return emptyList()
         val columns = arrayOf(MediaStore.MediaColumns._ID, MediaStore.MediaColumns.DISPLAY_NAME,
-            MediaStore.MediaColumns.RELATIVE_PATH)
-        val out = ArrayList<Triple<Uri, String, String>>()
+            MediaStore.MediaColumns.RELATIVE_PATH, MediaStore.MediaColumns.SIZE)
+        val out = ArrayList<LegacyRow>()
         runCatching {
             context.contentResolver.query(
                 MediaStore.Downloads.EXTERNAL_CONTENT_URI, columns,
@@ -198,9 +227,9 @@ object Vault {
                 while (c.moveToNext()) {
                     val id = c.getLong(0)
                     val folder = c.getString(2).orEmpty().substringAfter("Download/$ROOT/").trim('/')
-                    out.add(Triple(
+                    out.add(LegacyRow(
                         Uri.withAppendedPath(MediaStore.Downloads.EXTERNAL_CONTENT_URI, id.toString()),
-                        c.getString(1).orEmpty(), folder.substringBefore('/')))
+                        c.getString(1).orEmpty(), folder.substringBefore('/'), c.getLong(3)))
                 }
             }
         }

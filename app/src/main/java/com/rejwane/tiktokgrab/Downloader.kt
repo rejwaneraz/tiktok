@@ -30,6 +30,9 @@ object Downloader {
     /** Anything under this is an error page, not a clip — the shortest real video is far bigger. */
     private const val NOT_A_VIDEO = 10_000L
 
+    /** The smallest picture TikTok ever hands out is still well above this. */
+    private const val SMALLEST_PICTURE = 1_000L
+
     private val client = OkHttpClient.Builder()
         .connectTimeout(30, TimeUnit.SECONDS)
         .readTimeout(90, TimeUnit.SECONDS)
@@ -114,8 +117,22 @@ object Downloader {
                 client.newCall(request).execute().use { response ->
                     if (!response.isSuccessful) throw RuntimeException("HTTP ${response.code}")
                     val body = response.body ?: throw RuntimeException("empty picture")
-                    target.outputStream().use { out ->
-                        body.byteStream().use { input -> input.copyTo(out) }
+                    val expected = body.contentLength()
+                    // A picture that lands half way is worse than one that never lands: it is a
+                    // permanent file the next pass reads as complete. So it comes down as a .part,
+                    // is measured against what the server promised, and only then becomes the file.
+                    val temp = File(target.absolutePath + ".part")
+                    try {
+                        temp.outputStream().use { out -> body.byteStream().use { input -> input.copyTo(out) } }
+                        val written = temp.length()
+                        if (written < SMALLEST_PICTURE)
+                            throw RuntimeException("not a picture (only $written bytes)")
+                        if (expected > 0 && written != expected)
+                            throw RuntimeException("incomplete picture: $written of $expected bytes")
+                        if (!temp.renameTo(target)) throw RuntimeException("could not store the picture")
+                    } catch (e: Exception) {
+                        runCatching { temp.delete() }
+                        throw e
                     }
                 }
             }
@@ -168,10 +185,14 @@ object Downloader {
     private suspend fun saveVault(context: Context, clip: Clip, response: Response,
                                   onBytes: (Long) -> Unit): Pair<String, String> {
         val file = Vault.file(context, clip.title.ifBlank { "tiktok" }, clip.id)
+        // The clip only becomes the real file once every byte is down: writing straight into it would
+        // leave a half file (or none at all, if the retry then failed) where a good clip used to be.
+        val temp = File(file.absolutePath + ".part")
         try {
-            file.outputStream().use { stream(response, it, onBytes) }
+            temp.outputStream().use { stream(response, it, onBytes) }
+            if (!temp.renameTo(file)) throw RuntimeException("could not store the video")
         } catch (e: Exception) {
-            runCatching { file.delete() }
+            runCatching { temp.delete() }
             throw e
         }
         return Pair(file.absolutePath, Uri.fromFile(file).toString())

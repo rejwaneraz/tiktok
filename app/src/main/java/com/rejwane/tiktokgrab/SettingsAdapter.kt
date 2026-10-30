@@ -41,6 +41,40 @@ object Theme {
     }
 }
 
+/**
+ * The two settings that are not text. Read through here because a backup written by an older build
+ * stored every value as text, and getInt/getBoolean on one of those throws ClassCastException —
+ * which is a crash on the very first screen after a reinstall.
+ */
+object Ui {
+
+    private fun prefs(context: Context) = context.getSharedPreferences("ui", Context.MODE_PRIVATE)
+
+    fun int(context: Context, key: String, default: Int): Int =
+        runCatching { prefs(context).getInt(key, default) }.getOrElse {
+            val text = runCatching { prefs(context).getString(key, "") }.getOrNull()?.trim()
+            fix(context, key, text?.toIntOrNull() ?: default)
+        }
+
+    fun setInt(context: Context, key: String, value: Int) = fix(context, key, value)
+
+    private fun fix(context: Context, key: String, value: Int): Int {
+        prefs(context).edit().putInt(key, value).apply()
+        return value
+    }
+
+    fun bool(context: Context, key: String, default: Boolean): Boolean =
+        runCatching { prefs(context).getBoolean(key, default) }.getOrElse {
+            val text = runCatching { prefs(context).getString(key, "") }.getOrNull()?.trim()
+            setBool(context, key, text?.toBooleanStrictOrNull() ?: default)
+        }
+
+    fun setBool(context: Context, key: String, value: Boolean): Boolean {
+        prefs(context).edit().putBoolean(key, value).apply()
+        return value
+    }
+}
+
 class App : android.app.Application() {
     override fun onCreate() {
         // First line: everything after this is what the Settings screen reports as start-up cost.

@@ -19,6 +19,7 @@ import kotlinx.coroutines.withContext
 class PlayerActivity : AppCompatActivity(), PlayerAdapter.Listener {
 
     private var adapter: PlayerAdapter? = null
+    private var watcher: ViewPager2.OnPageChangeCallback? = null
     private var position = 0
     private var saveTask: Job? = null
     private val tick = Handler(Looper.getMainLooper())
@@ -50,14 +51,15 @@ class PlayerActivity : AppCompatActivity(), PlayerAdapter.Listener {
             pager().adapter = it
         }
         pager().orientation = ViewPager2.ORIENTATION_VERTICAL
-        pager().registerOnPageChangeCallback(object : ViewPager2.OnPageChangeCallback() {
+        watcher = object : ViewPager2.OnPageChangeCallback() {
             override fun onPageSelected(selected: Int) {
                 position = selected
                 counter.text = "${selected + 1} / ${clips.size}"
                 adapter?.playAt(selected)
                 refreshSaveLabel(clips.getOrNull(selected))
             }
-        })
+        }
+        watcher?.let { pager().registerOnPageChangeCallback(it) }
         findViewById<TextView>(R.id.close).setOnClickListener { finish() }
         saveBtn.setOnClickListener { clips.getOrNull(position)?.let { download(it) } }
 
@@ -82,8 +84,11 @@ class PlayerActivity : AppCompatActivity(), PlayerAdapter.Listener {
      * id, and the file it writes is the same one the offline feed reads later.
      */
     override fun onComment(clip: Clip) {
+        val photo = clip.isPhoto
         CommentSheet.show(this, clip.id, clip.title, clip.stat.comments) { id ->
-            val got = withContext(Dispatchers.IO) { Comments.fetch(this@PlayerActivity, id) }
+            val got = withContext(Dispatchers.IO) {
+                Comments.fetch(this@PlayerActivity, id, photo)
+            }
             Backup.snapshot(this@PlayerActivity)
             !got.failed
         }
@@ -163,6 +168,10 @@ class PlayerActivity : AppCompatActivity(), PlayerAdapter.Listener {
 
     override fun onDestroy() {
         saveTask?.cancel()
+        adapter?.pauseAll()
+        // A callback left on the pager outlives the screen it was written for.
+        watcher?.let { runCatching { pager().unregisterOnPageChangeCallback(it) } }
+        watcher = null
         adapter = null
         PlayerQueue.clear()
         super.onDestroy()
