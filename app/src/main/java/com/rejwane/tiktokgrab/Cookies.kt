@@ -37,4 +37,34 @@ object Cookies {
         }
         if (changed) manager.flush()
     }
+
+    // region Instagram
+
+    /**
+     * Instagram lives in the same cookie jar as TikTok, and the two are never mixed: the media reader
+     * is anonymous on purpose (a session attached to the crawler read makes Instagram take the media
+     * payload back off the page), and the only thing the Instagram session is good for is the browser
+     * path — the profile's list of posts, which stops at twelve without it.
+     */
+    const val ORIGIN_INSTAGRAM = "https://www.instagram.com"
+
+    fun hasInstagramLogin(): Boolean =
+        (CookieManager.getInstance().getCookie(ORIGIN_INSTAGRAM) ?: "")
+            .split(";").any { it.trim().startsWith("sessionid") }
+
+    /** TikTok's own sign-out clears everything; this one must not take the TikTok login with it. */
+    fun signOutInstagram() {
+        val manager = CookieManager.getInstance()
+        val dead = "expires=Thu, 01 Jan 1970 00:00:00 GMT"
+        listOf("sessionid", "sessionid_ss", "sidcc", "ds_user_id", "csrftoken", "mid", "datr",
+            "ig_did", "ig_nrcb", "rur", "wd", "dpr", "ps_l", "ps_n").forEach { name ->
+            // Both shapes: the login page's cookies are set for the whole .instagram.com domain, while
+            // ones imported from a PC export land as host-only on www.instagram.com — clearing only the
+            // domain form would leave an imported session alive behind a "logged out" label.
+            manager.setCookie(ORIGIN_INSTAGRAM, "$name=; $dead; path=/; domain=.instagram.com")
+            manager.setCookie(ORIGIN_INSTAGRAM, "$name=; $dead; path=/")
+        }
+        manager.flush()
+    }
+    // endregion
 }

@@ -268,14 +268,15 @@ class MainActivity : AppCompatActivity() {
 
     /** Every number a Settings row shows costs a folder read, so they are taken together off-main. */
     private data class Counts(val avatars: Int, val comments: Int, val backup: Int,
-                              val frames: Boolean, val crash: String)
+                              val frames: Boolean, val crash: String, val instagram: String)
 
     private fun readCounts() = Counts(
         Authors.cachedAvatars(applicationContext),
         Comments.stored(applicationContext),
         Backup.recordCount(applicationContext),
         FrameExport.folder(applicationContext).isDirectory,
-        CrashRecorder.text(applicationContext)
+        CrashRecorder.text(applicationContext),
+        InstagramApi.state(applicationContext)
     )
 
     private fun showSettings() {
@@ -345,6 +346,45 @@ class MainActivity : AppCompatActivity() {
                     Cookies.signOut()
                     showLoginState()
                     note("Logged out", "The TikTok session is cleared from this app.")
+                }
+            },
+            // Instagram's login is not what downloads a post — that reader stays anonymous on
+            // purpose. The session is only what lets a profile name more than its last twelve posts.
+            SettingsAdapter.Row("Log in to Instagram", read.instagram, "Instagram") {
+                loginLauncher.launch(Intent(this, LoginActivity::class.java)
+                    .putExtra(LoginActivity.SITE, "instagram"))
+            },
+            SettingsAdapter.Row("Check the Instagram login now", "", "Instagram") {
+                statusView.text = "Reading the Instagram profile the browser way…"
+                // Built on the thread that owns views; the read itself happens off it.
+                val web = igWeb ?: InstagramWeb(this).also { igWeb = it }
+                lifecycleScope.launch {
+                    val check = withContext(Dispatchers.IO) {
+                        val links = runCatching { web.profileCodes("instagram", 40) }
+                            .getOrDefault(emptyList())
+                        // The state line reads prefs and the cookie jar, so it comes from here too.
+                        links to InstagramApi.state(applicationContext)
+                    }
+                    showSettings()
+                    note("Instagram browser read", lines(
+                        if (check.first.isEmpty()) "The browser named no posts — Instagram is showing a " +
+                            "wall, or this device is being asked to verify."
+                        else "${check.first.size} post links read from instagram.com.",
+                        "",
+                        "Twelve or fewer means the login is not reaching the browser; well past twelve " +
+                            "means it is, and a profile can be walked further.",
+                        "",
+                        check.second))
+                }
+            },
+            SettingsAdapter.Row("Log out of Instagram", "", "Instagram") {
+                confirm("Log out of Instagram", lines(
+                    "Only the Instagram session is cleared — TikTok stays signed in.", "",
+                    "Posts and reels still download without any login; this only affects how many " +
+                        "posts a profile will list.")) {
+                    Cookies.signOutInstagram()
+                    showSettings()
+                    note("Logged out", "The Instagram session is cleared from this app.")
                 }
             },
             SettingsAdapter.Row("Clear cached profiles", "", "Account") {
@@ -849,15 +889,22 @@ class MainActivity : AppCompatActivity() {
         refresh.isRefreshing = true
         showSection(LIST)
         statusView.text = if (single) "Reading the Instagram post…"
-        else "Opening the Instagram profile…"
+        else "Instagram profile — up to $cap posts, ~${cap * 9 / 10} MB of reading before any of it " +
+            "is saved"
         val web = igWeb ?: InstagramWeb(this).also { igWeb = it }
 
         task = lifecycleScope.launch {
             try {
                 val clips = withContext(Dispatchers.IO) {
-                    InstagramApi.read(web, query, cap) { _, note ->
+                    val found = InstagramApi.read(web, query, cap) { _, note ->
                         runOnUiThread { statusView.text = note }
                     }
+                    // Remembered as the session's proof: a login that named twelve posts is worth
+                    // knowing about before a big pull is paid for. The prefs write happens here, off
+                    // the thread that draws.
+                    InstagramApi.noteScan(applicationContext, found.size,
+                        found.count { it.play.isNotBlank() })
+                    found
                 }
                 adapter.submit(clips, Downloader.doneIds(this@MainActivity))
                 refresh.isRefreshing = false
@@ -946,8 +993,12 @@ class MainActivity : AppCompatActivity() {
         if (state.running) {
             statusView.text = "${state.done + 1}/${state.total} · ${state.current} · ${state.percent}%"
         } else if (state.total > 0) {
-            statusView.text = getString(R.string.done, state.done - state.failed, state.total) +
-                if (state.failed == 0) "" else " · ${state.failed} failed"
+            val trouble = if (state.failed == 0) ""
+            // The reason, not just the count: on the phone there is no logcat to ask, and a silent
+            // "1 failed" cannot be told apart from a batch that was only cancelled.
+            else " · ${state.failed} failed" +
+                if (state.lastError.isBlank()) "" else " · ${state.lastError}"
+            statusView.text = getString(R.string.done, state.done - state.failed, state.total) + trouble
             if (downloadsWereRunning && section == LIBRARY) refreshLibrary()
         }
         downloadsWereRunning = state.running

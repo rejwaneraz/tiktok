@@ -1,5 +1,6 @@
 package com.rejwane.tiktokgrab
 
+import android.content.Context
 import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -38,15 +39,53 @@ object InstagramApi {
 
     fun isInstagram(input: String) = input.contains("instagram.com")
 
+    private const val PREF = "instagram"
+
+    /**
+     * What the last profile read actually produced. A cookie only proves it was saved, so this is the
+     * number Settings shows next to the login: a signed-in session that named nothing is a failure the
+     * user has to be able to see.
+     */
+    fun noteScan(context: Context, posts: Int, videos: Int) {
+        context.getSharedPreferences(PREF, Context.MODE_PRIVATE).edit()
+            .putLong("at", System.currentTimeMillis()).putInt("posts", posts).putInt("videos", videos)
+            .apply()
+    }
+
+    /** One honest line for the Settings row. Reads prefs, so call it off the frame thread. */
+    fun state(context: Context): String {
+        if (!Cookies.hasInstagramLogin()) return "Not signed in · 12 posts per profile"
+        val prefs = context.getSharedPreferences(PREF, Context.MODE_PRIVATE)
+        val at = prefs.getLong("at", 0L)
+        if (at == 0L) return "Signed in · no profile read yet"
+        val posts = prefs.getInt("posts", 0)
+        val videos = prefs.getInt("videos", 0)
+        val ago = GridAdapter.ago(at / 1000)
+        return if (posts == 0) "Signed in · last read named nothing ($ago)"
+        else "Signed in · last read $posts posts, $videos reels ($ago)"
+    }
+
     /** /p/, /reel/ and the old /tv/ shapes all name exactly one post. */
     fun code(input: String): String? =
         Regex("/(?:p|reel|tv)/([A-Za-z0-9_-]{11})").find(input)?.groupValues?.get(1)
 
-    /** A profile address, or null for anything that is not one. */
+    /** A story link names a person and a moment, not a post — and stories are not read here yet. */
+    fun isStory(input: String) = Regex("instagram\\.com/(stories|live)/").containsMatchIn(input)
+
+    /**
+     * A profile address. Shared Instagram links almost always carry something after the name —
+     * "?igshid=…", "?hl=en", a fragment — and the old shape refused every one of them, which looked
+     * exactly like "this profile does not exist".
+     */
     fun username(input: String): String? {
-        val path = input.substringAfter("instagram.com/", "").trim('/')
-        if (path.isBlank() || path.contains('?')) return null
-        val first = path.substringBefore('/')
+        val path = input.substringAfter("instagram.com/", "")
+            .substringBefore('#').substringBefore('?').trim('/')
+        if (path.isBlank()) return null
+        var first = path.substringBefore('/')
+        // /stories/<name>/ and /reels/ name the owner rather than a post, in those shapes.
+        if (first in setOf("stories", "reels", "saved", "guides", "channel")) {
+            first = path.substringAfter('/').substringBefore('/')
+        }
         if (first.isBlank() || first in reserved) return null
         return first
     }
@@ -64,6 +103,10 @@ object InstagramApi {
         }
         val user = username(input)
             ?: throw RuntimeException("Instagram: paste a post, reel, or profile link")
+        // A story would otherwise be answered with the profile's twelve posts, which is not what the
+        // person pasted and not something they could tell from the screen.
+        if (isStory(input)) throw RuntimeException(
+            "Instagram stories are not read by this app — paste a post or reel link")
 
         // A browser is the only thing Instagram will list a profile to. A screen closed mid-scan is
         // not a failed read: its cancellation is passed through instead of quietly falling back.

@@ -27,7 +27,10 @@ object Downloads {
         val percent: Int = 0,
         val failed: Int = 0,
         val savedId: String = "",
-        val lastSaved: String = ""
+        val lastSaved: String = "",
+        /** Why the last clip that failed failed. Without this a failed batch looks identical to a
+         *  cancelled one, and there is no logcat on the phone to ask. */
+        val lastError: String = ""
     )
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -91,6 +94,7 @@ object Downloads {
             var failed = 0
             var savedId = ""
             var lastSaved = ""
+            var lastError = ""
             val broken = ArrayList<Clip>()
             try {
                 for (clip in clips) {
@@ -108,14 +112,16 @@ object Downloads {
                         throw e
                     } catch (e: Exception) {
                         failed++
+                        lastError = e.message ?: "download failed"
                         broken.add(clip)
                         failedClips = broken.toList()
                     }
                     done++
-                    publish(state.copy(done = done, failed = failed, savedId = savedId, lastSaved = lastSaved, percent = 0))
+                    publish(state.copy(done = done, failed = failed, savedId = savedId,
+                        lastSaved = lastSaved, percent = 0, lastError = lastError))
                 }
                 publish(State(running = false, done = done, total = clips.size, failed = failed,
-                    savedId = savedId, lastSaved = lastSaved))
+                    savedId = savedId, lastSaved = lastSaved, lastError = lastError))
             } finally {
                 // A stopped batch can unwind after a new one has already started; it must not take
                 // the new batch's notification down with it.

@@ -191,6 +191,103 @@ def check_call_sites(root):
     infos.append("Comments.fetch call sites: " + str(fetch_sites))
 
 
+def check_shadowing(root):
+    """A local val/var declared with the name of one of the function's own parameters.
+
+    Kotlin puts parameters in the same scope as the function body, so this is a compile error
+    ("conflicting declarations"), and no other check here notices: the brackets still balance. Two
+    builds were lost to it, which is why the scanner walks signatures (even ones spread over several
+    lines) and looks only at the body's own level — a name repeated inside a lambda or an if-block is
+    legal shadowing, and a gate that cries wolf gets ignored.
+    """
+    param = re.compile(r'(?:^|,)\s*(?:\w+\s+)?(\w+)\s*:')
+    head = re.compile(r'(\s*)(?:(?:private|internal|public|open|override|suspend|abstract)\s+)*'
+                      r'fun\s+(?:[\w<>?.]+\s*\.\s*)?(\w+)\s*\(')
+    for path in sorted(root.rglob('*.kt')):
+        if skip(path, root):
+            continue
+        rel = path.relative_to(root)
+        lines = strip_kotlin(path.read_text(encoding='utf-8')).splitlines()
+        for index, line in enumerate(lines):
+            named = head.match(line)
+            if not named:
+                continue
+            indent, fname = len(named.group(1)), named.group(2)
+            header, balance, sig_end = '', 0, index
+            while sig_end < len(lines):
+                chunk = lines[sig_end]
+                header += ' ' + chunk
+                balance += chunk.count('(') - chunk.count(')')
+                if balance <= 0 and '(' in header:
+                    break
+                sig_end += 1
+            names = [m.group(1) for m in param.finditer(header[header.index('(') + 1:])]
+            if not names:
+                continue
+            body = function_body(lines, sig_end, indent)
+            if body is None:
+                continue
+            start, end = body
+            for at in range(start, end + 1):
+                local = re.match(r'\s*(?:val|var)\s+(\w+)\b', lines[at])
+                if not (local and local.group(1) in names):
+                    continue
+                # Depth is measured up to the declaration itself, so a lambda that opens its brace on
+                # the same line ("items.forEach { val a = … }") is not blamed for the body's level.
+                if brace_depth(lines, start, at, local.start()) == 1:
+                    problem(str(rel) + ':' + str(at + 1) + ": local '" + local.group(1) +
+                            "' has the same name as a parameter of " + fname +
+                            " (Kotlin: conflicting declarations)")
+
+
+def function_body(lines, sig_line, indent):
+    """The first and last line of a function's brace block, or None if it has none.
+
+    An expression body (`fun name(x: T) = x * 2`) declares nothing, and its scan must not run on into
+    the next function — that is exactly how a naive version of this check blames someone else's line.
+    """
+    row = sig_line
+    while row < len(lines):
+        line = lines[row]
+        stripped = line.strip()
+        if row > sig_line and stripped.startswith(('fun ', 'private fun', 'override fun', '@')):
+            return None
+        # A sibling declaration at the same indentation means this body never opened a brace.
+        if row > sig_line and stripped and len(line) - len(line.lstrip()) <= indent and '{' not in line:
+            return None
+        if '{' in line:
+            depth, end = 0, row
+            while end < len(lines):
+                for ch in lines[end]:
+                    if ch == '{':
+                        depth += 1
+                    elif ch == '}':
+                        depth -= 1
+                if depth <= 0:
+                    return row, end
+                end += 1
+            return row, len(lines) - 1
+        row += 1
+    return None
+
+
+def brace_depth(lines, from_line, target_line, column=0):
+    """How deep inside braces a point sits, counted from the body's opening brace (1 = body level)."""
+    depth = 0
+    for row in range(from_line, target_line):
+        for ch in lines[row]:
+            if ch == '{':
+                depth += 1
+            elif ch == '}':
+                depth -= 1
+    for ch in lines[target_line][:column]:
+        if ch == '{':
+            depth += 1
+        elif ch == '}':
+            depth -= 1
+    return depth
+
+
 def check_wrapper(root):
     needed = ['gradlew', 'gradlew.bat', 'gradle/wrapper/gradle-wrapper.jar',
               'gradle/wrapper/gradle-wrapper.properties']
@@ -202,6 +299,7 @@ def check_wrapper(root):
 def main():
     root = Path(sys.argv[1] if len(sys.argv) > 1 else '.').resolve()
     check_kotlin(root)
+    check_shadowing(root)
     check_xml(root)
     check_refs(root)
     check_call_sites(root)
@@ -211,7 +309,8 @@ def main():
         for p in problems:
             print("  - " + p)
         return 1
-    print("OK - Kotlin brackets balanced, XML parses, every R.string / R.id resolves, wrapper present.")
+    print("OK - Kotlin brackets balanced, no local re-declares a parameter, XML parses, "
+          "every R.string / R.id resolves, wrapper present.")
     for line in infos:
         print("  . " + line)
     return 0

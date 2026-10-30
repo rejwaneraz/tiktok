@@ -270,6 +270,51 @@ Ceilings, stated so nobody is surprised: the unlimited list setting is held to 6
 the browser path; Instagram comments are not fetched at all, and the preview says so rather than
 opening a sheet that can only fail.
 
+### 2026-10-30 — the Instagram login lives in Settings, and is only a ceiling-lifter
+Instagram gets a login row in Settings (same WebView screen TikTok already uses, told which site to
+show by an extra), plus a logout that clears **only** `.instagram.com` cookies — TikTok's `signOut` wipes
+the whole jar, which would have thrown the TikTok login away as collateral.
+
+What the login is for, and what it is not for:
+
+* It is not what downloads a post. The media reader stays anonymous on purpose — a session attached to
+  the crawler read makes Instagram take the payload back (1.32 MB of media → 0.74 MB of nothing).
+* It is what names the posts. The browser path stops at twelve links logged out; signed in it keeps
+  loading while scrolling (measured 42 → 102 → 138 on an account with 1,523 posts).
+* A row next to it, "Check the Instagram login now", reads @instagram's profile in the browser and
+  reports how many links came back — because a cookie only proves it was saved. Twelve or fewer means
+  the session is not reaching the WebView; well past twelve means a profile can be walked further.
+* The last real profile read is remembered (how many posts, how many reels, when) and shown as the
+  row's value, so the state line is a fact about the last read rather than about a stored string.
+
+*Honest limit:* this puts his own account in the frame. The scan paces itself (one scroll per 1.3 s) and
+is capped by the list-count chooser (60 by default, 120 maximum), and nothing is ever posted, liked or
+followed through that session — but automated paging is what Instagram restricts, so a big pull should
+be done in pieces.
+
+### 2026-10-30 — a profile link with tracking on it is still a profile link
+Shared Instagram URLs carry `?igshid=…`, `?hl=en` or a fragment, and `username()` refused every one of
+them — which the user saw as "this profile cannot be found". The query and fragment are cut before the
+name is taken, `/reels/`, `/saved/` and `/stories/<name>/` resolve to their owner, and a story link says
+"stories are not read by this app" instead of quietly showing twelve unrelated posts.
+
+A failed download now says why. The queue only ever counted failures, so "1 failed" could not be told
+apart from a cancelled batch and there is no logcat on the phone; the first exception message rides along
+in the queue's state and is printed in the status line.
+
+### 2026-10-30 — CI now catches the error class that cost two builds
+A local `val`/`var` declared with the name of one of its own function's parameters is a Kotlin
+"conflicting declarations" error, and nothing in the old gate noticed: the brackets still balanced, the
+XML still parsed, the `R.*` names all resolved. It happened twice in one day (`LocalVideos.forYou`'s
+`fresh`, then `paintSettings`' `read`), so `tools/check_sources.py` now walks every function signature —
+including ones spread over several lines — and reports body-level clashes.
+
+It deliberately ignores a name repeated inside a lambda or an `if`-block, which is only a warning, and it
+stops at an expression body (`fun name(user, big) = …`) rather than running on into the next function and
+blaming that one's lines — a first version did exactly that, and a gate that cries wolf gets ignored.
+The rule was validated against a fixture holding two real clashes (one of them in a multi-line
+signature) and three legal shadowings; the check reports the first two and stays silent on the rest.
+
 ## Measured, from a real request (2026-10-20)
 
 `https://www.tikwm.com/api/?url=<video>&hd=1` → 200, 7.2 KB, 2.1 s: `duration`, `size`, `hd_size`,
