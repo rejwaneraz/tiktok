@@ -40,6 +40,15 @@ object Downloader {
 
     private fun prefs(context: Context) = context.getSharedPreferences("saved", Context.MODE_PRIVATE)
 
+    /**
+     * Whose CDN this is. TikTok's wants the session cookies attached; Instagram's takes a cookie it
+     * never issued as a foreign credential and answers 403, so each host gets only what it asked for.
+     */
+    private fun fromInstagram(clip: Clip) = clip.page.contains("instagram.com")
+
+    private fun refererOf(clip: Clip) =
+        if (fromInstagram(clip)) InstagramApi.REFERER else "https://www.tiktok.com/"
+
     fun doneIds(context: Context) = prefs(context).getStringSet("ids", emptySet()) ?: emptySet()
 
     /** Deleting the file must not leave the clip marked as downloaded forever. */
@@ -112,7 +121,7 @@ object Downloader {
             if (!target.isFile || target.length() == 0L) {
                 val request = Request.Builder().url(url)
                     .header("User-Agent", UA)
-                    .header("Referer", "https://www.tiktok.com/")
+                    .header("Referer", refererOf(clip))
                     .build()
                 client.newCall(request).execute().use { response ->
                     if (!response.isSuccessful) throw RuntimeException("HTTP ${response.code}")
@@ -140,22 +149,24 @@ object Downloader {
             total += target.length()
             onPercent(((index + 1) * 100f) / clip.images.size)
         }
-        Vault.record(context, clip.id, clip.author, clip.title)
+        Vault.record(context, clip.id, clip.author, clip.title, clip.page)
         prefs(context).edit().putStringSet("ids", doneIds(context) + clip.id).apply()
         Saved(clip.id, first, Uri.fromFile(File(first)).toString(), total, false)
     }
 
     private suspend fun attempt(context: Context, clip: Clip, name: String,
                                 onPercent: (Float) -> Unit): Saved {
-        val request = Request.Builder().url(clip.play)
-            .header("Cookie", Cookies.header())
+        val builder = Request.Builder().url(clip.play)
             .header("User-Agent", UA)
-            .header("Referer", "https://www.tiktok.com/")
-            .build()
+            .header("Referer", refererOf(clip))
+        if (!fromInstagram(clip)) builder.header("Cookie", Cookies.header())
+        val request = builder.build()
 
         return withContext(Dispatchers.IO) {
             client.newCall(request).execute().use { response ->
-                Cookies.update(response.headers("Set-Cookie"))
+                // Only TikTok's own msToken is ever stored; a CDN answer from elsewhere must not
+                // touch the session that the login depends on.
+                if (!fromInstagram(clip)) Cookies.update(response.headers("Set-Cookie"))
                 if (!response.isSuccessful) throw RuntimeException("HTTP ${response.code}")
                 val total = response.body?.contentLength() ?: -1L
                 var written = 0L
@@ -174,7 +185,7 @@ object Downloader {
                 }
                 // The profile is a record now, not a folder — written even for the old paths, so a
                 // later move into the library still knows who the video belongs to.
-                Vault.record(context, clip.id, clip.author, clip.title)
+                Vault.record(context, clip.id, clip.author, clip.title, clip.page)
                 prefs(context).edit().putStringSet("ids", doneIds(context) + clip.id).apply()
                 Saved(clip.id, path, uri, written, false)
             }

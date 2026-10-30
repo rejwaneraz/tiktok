@@ -47,6 +47,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var settingsList: RecyclerView
 
     private var tikWeb: TikTokWeb? = null
+    private var igWeb: InstagramWeb? = null
     private var task: Job? = null
     private var commentTask: Job? = null
     private var exportTask: Job? = null
@@ -763,6 +764,12 @@ class MainActivity : AppCompatActivity() {
             statusView.text = "Type a username or link"
             return
         }
+        // One button, one list: an Instagram link is read by the Instagram reader and comes back as
+        // ordinary clips, so the tick, the queue, the library and the feed never learn a new shape.
+        if (InstagramApi.isInstagram(query)) {
+            loadInstagram(query)
+            return
+        }
         if (!Cookies.hasLogin()) {
             statusView.text = getString(R.string.need_login)
             loginLauncher.launch(Intent(this, LoginActivity::class.java))
@@ -817,6 +824,64 @@ class MainActivity : AppCompatActivity() {
             } catch (e: Exception) {
                 Session.bad(this@MainActivity, e.message ?: "read failed")
                 statusView.text = e.message ?: "Failed"
+            } finally {
+                loadBtn.isEnabled = true
+                refresh.isRefreshing = false
+                showSelection()
+            }
+        }
+    }
+
+    /**
+     * Instagram through the same paste button: a post or a reel link comes back as one clip and is
+     * downloaded at once, a profile link fills this list with the posts Instagram will name, and
+     * ticking is the same tick it always was.
+     *
+     * There is no Instagram login in this app on purpose: the reader stays anonymous, because a
+     * session attached to the crawler read makes Instagram take the media payload back off the page.
+     */
+    private fun loadInstagram(query: String) {
+        val single = InstagramApi.code(query) != null
+        // "everything" on Instagram costs about 0.86 MB of reading per post, so the unlimited setting
+        // is held to a ceiling instead of quietly billing for a thousand of them.
+        val cap = if (wantedLimit() <= 0) 60 else minOf(wantedLimit(), 120)
+        loadBtn.isEnabled = false
+        refresh.isRefreshing = true
+        showSection(LIST)
+        statusView.text = if (single) "Reading the Instagram post…"
+        else "Opening the Instagram profile…"
+        val web = igWeb ?: InstagramWeb(this).also { igWeb = it }
+
+        task = lifecycleScope.launch {
+            try {
+                val clips = withContext(Dispatchers.IO) {
+                    InstagramApi.read(web, query, cap) { _, note ->
+                        runOnUiThread { statusView.text = note }
+                    }
+                }
+                adapter.submit(clips, Downloader.doneIds(this@MainActivity))
+                refresh.isRefreshing = false
+                val first = clips.firstOrNull()
+                val already = clips.count { it.id in Downloader.doneIds(this@MainActivity) }
+                if (single && first != null) {
+                    statusView.text = "Instagram — " +
+                        if (first.play.isBlank()) "${first.images.size} picture(s) · downloading…"
+                        else "reel · downloading…"
+                    startDownloads(listOf(first))
+                } else if (first == null) {
+                    statusView.text = "Instagram showed nothing for that link"
+                } else {
+                    val videos = clips.count { it.play.isNotBlank() }
+                    statusView.text = "${clips.size} Instagram posts · $videos with video" +
+                        (if (already > 0) " · $already already downloaded" else "") +
+                        " · tick what you want"
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // Nothing here says the TikTok session broke, because it did not: the two readers are
+                // separate, and blaming the login would be a lie the user acts on.
+                statusView.text = e.message ?: "Instagram read failed"
             } finally {
                 loadBtn.isEnabled = true
                 refresh.isRefreshing = false
@@ -923,6 +988,8 @@ class MainActivity : AppCompatActivity() {
         task?.cancel()
         tikWeb?.destroy()
         tikWeb = null
+        igWeb?.destroy()
+        igWeb = null
         super.onDestroy()
     }
 }

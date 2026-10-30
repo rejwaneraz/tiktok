@@ -13,7 +13,7 @@ object LocalMenu {
 
     fun show(host: AppCompatActivity, clip: LocalVideo, profiles: List<String>,
              onDeleted: () -> Unit, onMoved: () -> Unit) {
-        val labels = arrayOf("Delete", "Share", "Play in another app", "Open on TikTok",
+        val labels = arrayOf("Delete", "Share", "Play in another app", "Open the post",
             "Copy file name", "Move to profile", "Collections…")
         MaterialAlertDialogBuilder(host)
             .setTitle(clip.caption.ifBlank { clip.name })
@@ -22,7 +22,7 @@ object LocalMenu {
                     0 -> confirm(host, clip, onDeleted)
                     1 -> share(host, clip)
                     2 -> openOutside(host, clip)
-                    3 -> openOnTikTok(host, clip)
+                    3 -> openSourcePost(host, clip)
                     4 -> copy(host, clip)
                     5 -> move(host, clip, profiles, onMoved)
                     6 -> tag(host, clip, onMoved)
@@ -148,7 +148,15 @@ object LocalMenu {
         }.getOrNull()
     }
 
-    private fun openOnTikTok(host: AppCompatActivity, clip: LocalVideo) {
+    private fun openSourcePost(host: AppCompatActivity, clip: LocalVideo) {
+        // The record says which site the file really came from; a clip downloaded from Instagram must
+        // not be sent to a TikTok address that holds nothing.
+        val saved = Vault.pageOf(host, clip.clipId)
+        if (saved.startsWith("http")) {
+            runCatching { host.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(saved))) }
+                .onFailure { note(host, "No browser for this link") }
+            return
+        }
         val kind = if (clip.isPhoto) "photo" else "video"
         val page = if (clip.clipId.isBlank()) "https://www.tiktok.com/@${clip.author}"
         else "https://www.tiktok.com/@${clip.author}/$kind/${clip.clipId}"

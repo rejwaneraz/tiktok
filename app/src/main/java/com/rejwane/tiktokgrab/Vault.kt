@@ -135,19 +135,27 @@ object Vault {
         return renamed
     }
 
-    fun record(context: Context, clipId: String, author: String, caption: String) {
+    fun record(context: Context, clipId: String, author: String, caption: String, page: String = "") {
         if (clipId.isBlank()) return
         // One lock for read + write: several downloads run at the same time, and the last one to
         // finish used to overwrite the others' records with the table it read before they landed.
         synchronized(this) {
             val root = table(context)
-            root.put(clipId, JSONArray().put(author).put(caption))
+            root.put(clipId, JSONArray().put(author).put(caption).put(page))
             prefs(context).edit().putString(KEY, root.toString()).apply()
         }
     }
 
     fun captionOf(context: Context, clipId: String): String =
         if (clipId.isBlank()) "" else table(context).optJSONArray(clipId)?.optString(1).orEmpty()
+
+    /**
+     * Where the clip really came from. A file has no host in its name, so without this an Instagram
+     * clip saved in the same library would be "opened on TikTok" by the long-press menu — a link to a
+     * video that does not exist there.
+     */
+    fun pageOf(context: Context, clipId: String): String =
+        if (clipId.isBlank()) "" else table(context).optJSONArray(clipId)?.optString(2).orEmpty()
 
     /** The profile a file belongs to: our own record first, then whatever folder it came from. */
     fun authorOf(context: Context, clipId: String, fallback: String): String {
@@ -161,7 +169,8 @@ object Vault {
         synchronized(this) {
             val root = table(context)
             val old = root.optJSONArray(clipId)
-            root.put(clipId, JSONArray().put(author).put(old?.optString(1) ?: ""))
+            root.put(clipId, JSONArray().put(author).put(old?.optString(1) ?: "")
+                .put(old?.optString(2) ?: ""))
             prefs(context).edit().putString(KEY, root.toString()).apply()
         }
         return true

@@ -133,14 +133,14 @@ class PlayerAdapter(
                 caption.text = "Cannot play — tap again"
                 true
             }
-            video.setVideoURI(
-                Uri.parse(clip.play),
-                mapOf(
-                    "Cookie" to Cookies.header(),
-                    "User-Agent" to Http.UA,
-                    "Referer" to "https://www.tiktok.com/"
-                )
+            val headers = if (clip.page.contains("instagram.com"))
+                mapOf("User-Agent" to Http.UA, "Referer" to InstagramApi.REFERER)
+            else mapOf(
+                "Cookie" to Cookies.header(),
+                "User-Agent" to Http.UA,
+                "Referer" to "https://www.tiktok.com/"
             )
+            video.setVideoURI(Uri.parse(clip.play), headers)
             pauseIcon.visibility = View.VISIBLE
         }
 

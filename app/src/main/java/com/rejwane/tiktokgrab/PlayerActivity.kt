@@ -84,6 +84,12 @@ class PlayerActivity : AppCompatActivity(), PlayerAdapter.Listener {
      * id, and the file it writes is the same one the offline feed reads later.
      */
     override fun onComment(clip: Clip) {
+        if (clip.page.contains("instagram.com")) {
+            // Comments were the one thing the anonymous reader never got, so the screen says that
+            // instead of opening a sheet that would only ever report a failure.
+            status.text = "Instagram comments are not available — this reader takes the media only"
+            return
+        }
         val photo = clip.isPhoto
         CommentSheet.show(this, clip.id, clip.title, clip.stat.comments) { id ->
             val got = withContext(Dispatchers.IO) {

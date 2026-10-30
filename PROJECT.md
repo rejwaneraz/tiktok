@@ -13,6 +13,7 @@ changes — the old entry stays, marked as superseded.
 | Comments come from the public reader, never from TikTok | TikTok's `api/comment/list/` answers 200 with an empty body unless the request is signed (X-Bogus/Argus). Five parameter shapes, real cookies, curl_cffi and a replayed WebView request all failed. |
 | Nothing blocks on the WebView thread | `shouldInterceptRequest` runs on the WebView's own thread; a 30–60 s OkHttp call there, or `destroy()` during a load, is a native crash with no Java stack. |
 | No desktop UA inside the WebView | Android WebView claiming Windows Chrome fails TikTok's own browser check and the page never loads. |
+| Every host is sent only its own headers | TikTok's CDN needs the session attached; Instagram's answers 403 to a cookie it never issued, and stores nothing we should keep. One header set for both loses one of them. |
 | Source files are written with file tools, never a shell heredoc | The shell eats `\n` and `\'`, which produced broken string literals and AAPT "Invalid unicode escape sequence". |
 | A session is only as good as the last real read | A cookie proves it was saved, nothing more. The last listing outcome is what Settings shows. |
 
@@ -240,6 +241,35 @@ inside one lock, because several pages used to write the copy they each read.
 existed for that), `onDraw`-time guesses at which picture is missing, and a second `.nomedia`-less
 frames folder that a gallery would index.
 
+### 2026-10-30 — Instagram arrives through the same paste button, and stays anonymous
+Instagram is not a second app inside this one: a pasted instagram.com link is read by `InstagramApi`
+and comes back as ordinary `Clip`s, so the tick, the queue, the library, the grouping of a slideshow
+into one clip and the feed are unchanged, and there is no new screen.
+
+The reader is deliberately **not** logged in. Measured on this machine: the profile page asked as
+Chrome is 511 KB of nothing; asked as Googlebot it is 1.32 MB carrying 41 media records — and with a
+session attached the same crawler page drops back to 738 KB with no media at all. A session buys
+nothing either: `web_profile_info` answers 429 and `feed/user/<id>` 403 whatever cookies, claims or app
+user agent are sent, because Instagram judges the client rather than the credential. So the read that
+works is the anonymous one, and a cookie would only cost us the payload.
+
+What an anonymous HTTP read cannot do is name the posts: the grid carries numeric ids and covers, no
+`/p/` links and no `video_versions`. A real browser does — 12 links logged out, and 42 → 138 and rising
+once scrolled while signed in. Hence `InstagramWeb`: the same invisible 2 x 2 WebView trick TikTok
+already uses, reading the post links out of the DOM, scrolling until the grid stops producing. Each
+link is then resolved anonymously into a clip with its best picture (up to 3072 px observed) or its
+`video_versions` address. When the browser yields nothing — a private profile, a wall, a closed screen —
+the reader falls back to the grid's covers, and says which it did.
+
+*Killed:* an Instagram login screen (the session costs the payload and adds an account at risk), the
+JSON APIs (403/429 from any client we can produce here), and one clip per picture in a profile grid —
+a slideshow's own slides are dropped by parent id, not by a guess at how many keys a node carries.
+
+Ceilings, stated so nobody is surprised: the unlimited list setting is held to 60 posts on Instagram
+(120 if asked for), because each post costs ~0.86 MB of reading; a profile's videos only arrive through
+the browser path; Instagram comments are not fetched at all, and the preview says so rather than
+opening a sheet that can only fail.
+
 ## Measured, from a real request (2026-10-20)
 
 `https://www.tikwm.com/api/?url=<video>&hd=1` → 200, 7.2 KB, 2.1 s: `duration`, `size`, `hd_size`,
@@ -250,7 +280,38 @@ with 28 comments: `data{comments[], cursor, hasMore, total}`, comment fields `id
 digg_count, reply_total, images[], user{nickname, unique_id, avatar}`. A second page inside one second
 returns `code:-1` (the limit above).
 
+## Measured, from real requests (2026-10-30, Instagram)
+
+`https://www.instagram.com/p/Dd0lYNnE0BL/` → as Chrome 511 KB (no media); as **Googlebot 858 KB** with
+`image_versions2` for all four slides, 14 candidates each, the address with no size token being the file
+as encoded. Four downloaded: **1284 × 1411**, 529 / 529 / 312 / 225 KB, `FFD8…FFD9` verified, 1.60 MB.
+
+`https://www.instagram.com/reel/DeEaWPRKzGR/` → Googlebot only: `video_versions` gives
+`https://scontent-…cdninstagram.com/o1/v/t2/f2/m86/….mp4`; **11,629,245 bytes**, ffprobe reports h264
+720 × 1280, 33.27 s, AAC, 2.80 Mbit/s. `Accept-Ranges: bytes` and `Content-Range` are answered, so a
+1 MB ranged probe and the whole file both worked (3.35 MB/s).
+
+`https://www.instagram.com/<user>/` → Googlebot **1.32 MB, 41 media nodes = 12 posts** (9 carousels,
+3 single pictures), 32 pictures at up to **3072 × 4096**, `page_info.end_cursor` and
+`has_next_page: true` present — but **no shortcode and no `video_versions` anywhere**.
+
+Refused with a session attached (`sessionid`, `ds_user_id`, `csrftoken`, `datr`, `mid`, page claim, app
+UA, `x-ig-app-id: 936619743392459`): `users/web_profile_info` → **429**, `feed/user/<id>` → **403**,
+`www…/api/v1/feed/user/<id>` → 404, GraphQL `query_hash` → **400 invalid request**, `?__a=1&__d=dis` →
+404/201. Same answers with or without cookies.
+
+A real browser on the same profile: **12 post links logged out**, and 12 → 42 → 102 → 138 while scrolling
+when signed in (the page states "1,523 posts"); tiles leaving the screen are dropped from the DOM, so the
+set has to be accumulated in the page. ~6 links a second while scrolling. Address signatures
+(`oh`, `oe`) expire within hours — read and download in one sitting.
+
 ## Open questions
 
 - Whether comment pictures should ever come down in a batch (currently: no).
 - Whether the library folder should ever be hidden more aggressively than the extension allows.
+- Whether the Instagram profile scan can reuse the browser's own JSON responses (intercepted, as the
+  TikTok listing already is) instead of paying 0.86 MB per post — the one route that would make a large
+  profile cheap.
+- Whether an in-app Instagram login is ever worth it: it lifts the twelve-post ceiling, and puts his own
+  account on the line for automated paging.
+- Instagram stories and highlights: never attempted.

@@ -158,6 +158,8 @@ class GridAdapter(
             crossfade(false)
             // The cell is about 120 dp wide: decoding TikTok's full cover for it is wasted time.
             size(360)
+            // Instagram's CDN is addressed with its own page as the referrer, and nothing of ours.
+            if (clip.page.contains("instagram.com")) addHeader("Referer", InstagramApi.REFERER)
         }
         holder.check.visibility = if (selectMode) View.VISIBLE else View.GONE
         holder.check.isChecked = on
