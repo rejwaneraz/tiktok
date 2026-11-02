@@ -4,17 +4,19 @@
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:background="?android:attr/selectableItemBackground"
-    android:orientation="vertical">
+    android:orientation="vertical"
+    android:stateListAnimator="@anim/grab_press_scale">
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:gravity="center_vertical"
+        android:minHeight="@dimen/touch_row"
         android:orientation="horizontal"
-        android:paddingStart="16dp"
-        android:paddingTop="14dp"
-        android:paddingEnd="16dp"
-        android:paddingBottom="14dp">
+        android:paddingStart="@dimen/space_l"
+        android:paddingTop="@dimen/space_m"
+        android:paddingEnd="@dimen/space_l"
+        android:paddingBottom="@dimen/space_m">
 
         <TextView
             android:id="@+id/settingTitle"
@@ -22,28 +24,28 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:textColor="@color/text"
-            android:textSize="16sp" />
+            android:textSize="@dimen/text_row" />
 
         <TextView
             android:id="@+id/settingValue"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginEnd="6dp"
+            android:layout_marginEnd="@dimen/space_s"
             android:textColor="@color/muted"
-            android:textSize="14sp" />
+            android:textSize="@dimen/text_body" />
 
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="›"
             android:textColor="@color/muted"
-            android:textSize="17sp" />
+            android:textSize="@dimen/text_head" />
     </LinearLayout>
 
     <View
         android:layout_width="match_parent"
         android:layout_height="1dp"
-        android:layout_marginStart="16dp"
+        android:layout_marginStart="@dimen/space_l"
         android:background="@color/stroke" />
 
 </LinearLayout>

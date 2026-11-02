@@ -155,7 +155,7 @@ class GridAdapter(
         val on = clip.id in selected
         holder.root.setBackgroundResource(if (on) R.drawable.card_bg_selected else R.drawable.card_bg)
         holder.thumb.load(clip.thumb) {
-            crossfade(false)
+            crossfade(Motion.ms(holder.itemView.context, R.integer.dur_crossfade).toInt())
             // The cell is about 120 dp wide: decoding TikTok's full cover for it is wasted time.
             size(360)
             // Instagram's CDN is addressed with its own page as the referrer, and nothing of ours.

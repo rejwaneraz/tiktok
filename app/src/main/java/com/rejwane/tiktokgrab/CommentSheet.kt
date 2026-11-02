@@ -181,7 +181,7 @@ class CommentAdapter(
         view.scaleType = ImageView.ScaleType.CENTER_CROP
         view.setBackgroundResource(R.drawable.card_bg)
         if (uri != null) {
-            view.load(uri) { crossfade(false) }
+            view.load(uri) { crossfade(Motion.ms(context, R.integer.dur_crossfade).toInt()) }
             view.setOnClickListener {
                 ViewerQueue.urls = listOf(uri.toString())
                 ViewerQueue.title = comment.name

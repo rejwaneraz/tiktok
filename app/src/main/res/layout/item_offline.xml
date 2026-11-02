@@ -11,6 +11,19 @@
         android:layout_height="match_parent"
         android:layout_gravity="center" />
 
+    <!--
+      The cover frame that stands in while the player finds its first frame. Without it the feed is a
+      black hole for two or three seconds on every page, which is the single thing that made the app
+      feel dead. It dissolves the moment the film is ready.
+    -->
+    <ImageView
+        android:id="@+id/localPoster"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_gravity="center"
+        android:contentDescription="@null"
+        android:scaleType="centerCrop" />
+
     <ImageView
         android:id="@+id/localPhoto"
         android:layout_width="match_parent"
@@ -36,10 +49,10 @@
         android:id="@+id/localBar"
         style="?android:attr/progressBarStyleHorizontal"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
+        android:layout_height="4dp"
         android:layout_gravity="bottom"
         android:max="100"
-        android:progressTint="@color/on_video" />
+        android:progressDrawable="@drawable/progress_grab" />
 
     <LinearLayout
         android:id="@+id/rail"
@@ -78,11 +91,14 @@
 
         <ImageView
             android:id="@+id/railLike"
-            android:layout_width="32dp"
-            android:layout_height="32dp"
-            android:layout_marginTop="12dp"
+            android:layout_width="@dimen/rail_touch"
+            android:layout_height="@dimen/rail_touch"
+            android:layout_marginTop="@dimen/space_s"
             android:contentDescription="@null"
-            android:src="@drawable/rail_heart" />
+            android:padding="@dimen/rail_pad"
+            android:scaleType="fitCenter"
+            android:src="@drawable/rail_heart"
+            android:stateListAnimator="@anim/grab_press_scale" />
 
         <TextView
             android:id="@+id/railLikeCount"
@@ -92,16 +108,19 @@
             android:shadowColor="#80000000"
             android:shadowRadius="4"
             android:textColor="@color/on_video"
-            android:textSize="12sp"
+            android:textSize="@dimen/text_caption"
             android:textStyle="bold" />
 
         <ImageView
             android:id="@+id/railComment"
-            android:layout_width="32dp"
-            android:layout_height="32dp"
-            android:layout_marginTop="12dp"
+            android:layout_width="@dimen/rail_touch"
+            android:layout_height="@dimen/rail_touch"
+            android:layout_marginTop="@dimen/space_s"
             android:contentDescription="@null"
-            android:src="@drawable/rail_comment" />
+            android:padding="@dimen/rail_pad"
+            android:scaleType="fitCenter"
+            android:src="@drawable/rail_comment"
+            android:stateListAnimator="@anim/grab_press_scale" />
 
         <TextView
             android:id="@+id/railCommentCount"
@@ -111,16 +130,19 @@
             android:shadowColor="#80000000"
             android:shadowRadius="4"
             android:textColor="@color/on_video"
-            android:textSize="12sp"
+            android:textSize="@dimen/text_caption"
             android:textStyle="bold" />
 
         <ImageView
             android:id="@+id/railMark"
-            android:layout_width="32dp"
-            android:layout_height="32dp"
-            android:layout_marginTop="12dp"
+            android:layout_width="@dimen/rail_touch"
+            android:layout_height="@dimen/rail_touch"
+            android:layout_marginTop="@dimen/space_s"
             android:contentDescription="@null"
-            android:src="@drawable/rail_bookmark" />
+            android:padding="@dimen/rail_pad"
+            android:scaleType="fitCenter"
+            android:src="@drawable/rail_bookmark"
+            android:stateListAnimator="@anim/grab_press_scale" />
 
         <TextView
             android:id="@+id/railMarkCount"
@@ -130,16 +152,19 @@
             android:shadowColor="#80000000"
             android:shadowRadius="4"
             android:textColor="@color/on_video"
-            android:textSize="12sp"
+            android:textSize="@dimen/text_caption"
             android:textStyle="bold" />
 
         <ImageView
             android:id="@+id/railShare"
-            android:layout_width="32dp"
-            android:layout_height="32dp"
-            android:layout_marginTop="12dp"
+            android:layout_width="@dimen/rail_touch"
+            android:layout_height="@dimen/rail_touch"
+            android:layout_marginTop="@dimen/space_s"
             android:contentDescription="@null"
-            android:src="@drawable/rail_share" />
+            android:padding="@dimen/rail_pad"
+            android:scaleType="fitCenter"
+            android:src="@drawable/rail_share"
+            android:stateListAnimator="@anim/grab_press_scale" />
 
         <TextView
             android:id="@+id/railShareCount"
@@ -149,7 +174,7 @@
             android:shadowColor="#80000000"
             android:shadowRadius="4"
             android:textColor="@color/on_video"
-            android:textSize="12sp"
+            android:textSize="@dimen/text_caption"
             android:textStyle="bold" />
     </LinearLayout>
 
@@ -172,7 +197,7 @@
             android:shadowColor="#80000000"
             android:shadowRadius="4"
             android:textColor="@color/on_video"
-            android:textSize="15sp"
+            android:textSize="@dimen/text_row"
             android:textStyle="bold" />
 
         <TextView
@@ -220,7 +245,7 @@
             android:shadowColor="#80000000"
             android:shadowRadius="4"
             android:textColor="@color/on_video_muted"
-            android:textSize="11sp" />
+            android:textSize="@dimen/text_caption" />
     </LinearLayout>
 
 </FrameLayout>

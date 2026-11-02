@@ -5,6 +5,7 @@ import android.view.LayoutInflater
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
+import android.view.animation.AnimationUtils
 import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.ProgressBar
@@ -49,6 +50,7 @@ class OfflineAdapter(
 
     class Holder(view: View) : RecyclerView.ViewHolder(view) {
         val video: android.widget.VideoView = view.findViewById(R.id.localVideo)
+        val poster: ImageView = view.findViewById(R.id.localPoster)
         val photo: ImageView = view.findViewById(R.id.localPhoto)
         val pauseIcon: TextView = view.findViewById(R.id.localPause)
         val bar: ProgressBar = view.findViewById(R.id.localBar)
@@ -108,7 +110,8 @@ class OfflineAdapter(
             video.visibility = if (clip.isPhoto) View.GONE else View.VISIBLE
             photo.visibility = if (clip.isPhoto) View.VISIBLE else View.GONE
             if (clip.isPhoto) {
-                photo.load(clip.uri) { crossfade(false) }
+                poster.visibility = View.GONE
+                photo.load(clip.uri) { crossfade(Motion.ms(context, R.integer.dur_crossfade).toInt()) }
                 ready = true
                 pauseIcon.visibility = View.GONE
                 val many = if (clip.photos.size > 1) " · ${clip.photos.size} pictures" else ""
@@ -116,9 +119,11 @@ class OfflineAdapter(
                 bar.progress = 0
                 return
             }
+            showPoster(clip)
             video.setOnPreparedListener { mp ->
                 ready = true
                 mp.isLooping = true
+                Motion.dissolve(poster)
                 if (video.duration > 0) {
                     meta.text = "${clip.day()} · ${GridAdapter.clock(video.duration / 1000)} · ${clip.size()}"
                 }
@@ -130,6 +135,25 @@ class OfflineAdapter(
             }
             video.setVideoURI(clip.uri)
             pauseIcon.visibility = View.VISIBLE
+        }
+
+        /**
+         * The cover frame stands in until the player has a real picture. Two or three seconds of black
+         * on every page is what made the feed feel dead, and the frame is usually already decoded for
+         * the grid the clip came from.
+         */
+        private fun showPoster(clip: LocalVideo) {
+            poster.tag = clip.key
+            poster.alpha = 1f
+            poster.setImageDrawable(null)
+            poster.visibility = View.GONE
+            LocalThumbs.warm(itemView.context, clip) { bmp ->
+                // A recycled page belongs to a different clip by now; a page the player has already
+                // prepared needs no stand-in, and putting one over it would never take it off again.
+                if (poster.tag != clip.key || ready) return@warm
+                poster.setImageBitmap(bmp)
+                poster.visibility = View.VISIBLE
+            }
         }
 
         private fun paintEverything(clip: LocalVideo, info: AuthorInfo, listener: Listener, reuse: Boolean) {
@@ -197,9 +221,14 @@ class OfflineAdapter(
                 translationY = y - 60f
             }
             (itemView as FrameLayout).addView(heart)
-            heart.animate().scaleX(1.4f).scaleY(1.4f).alpha(0f).setDuration(650L).withEndAction {
-                (itemView as FrameLayout).removeView(heart)
-            }.start()
+            heart.scaleX = 0.4f
+            heart.scaleY = 0.4f
+            heart.animate().scaleX(1.4f).scaleY(1.4f).alpha(0f).setDuration(650L)
+                .setInterpolator(AnimationUtils.loadInterpolator(
+                    itemView.context, R.interpolator.grab_overshoot))
+                .withEndAction {
+                    (itemView as FrameLayout).removeView(heart)
+                }.start()
         }
 
         /** Hearts and bookmarks are ours; the numbers beside them are TikTok's own. */

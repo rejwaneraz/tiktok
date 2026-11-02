@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  One selector for the bottom bar: the tab that is open is accent, everything else is grey.
+  The Link button used to be painted red in the layout and never repainted, so two tabs always
+  looked selected at once.
+-->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:color="@color/accent" android:state_selected="true" />
+    <item android:color="@color/muted" />
+</selector>

@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Press feedback that costs no code: a view shrinks a little under the finger and springs back.
+  Applied through a style and through android:stateListAnimator on the tappable rows, so every
+  button, chip and cell in the app gets it at once.
+
+  The two objectAnimators sit directly inside the item, not wrapped in a <set>: the platform's
+  state-list parser is documented only for objectAnimator children, and this form is the one that
+  cannot fail to inflate.
+-->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_pressed="true">
+        <objectAnimator
+            android:duration="@integer/dur_press"
+            android:interpolator="@interpolator/grab_exit"
+            android:propertyName="scaleX"
+            android:valueTo="0.94"
+            android:valueType="floatType" />
+        <objectAnimator
+            android:duration="@integer/dur_press"
+            android:interpolator="@interpolator/grab_exit"
+            android:propertyName="scaleY"
+            android:valueTo="0.94"
+            android:valueType="floatType" />
+    </item>
+    <item>
+        <objectAnimator
+            android:duration="@integer/dur_spring"
+            android:interpolator="@interpolator/grab_overshoot"
+            android:propertyName="scaleX"
+            android:valueTo="1.0"
+            android:valueType="floatType" />
+        <objectAnimator
+            android:duration="@integer/dur_spring"
+            android:interpolator="@interpolator/grab_overshoot"
+            android:propertyName="scaleY"
+            android:valueTo="1.0"
+            android:valueType="floatType" />
+    </item>
+</selector>

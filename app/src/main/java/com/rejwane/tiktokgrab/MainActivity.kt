@@ -4,6 +4,7 @@ import android.content.ClipboardManager
 import android.content.Intent
 import android.os.Bundle
 import android.view.View
+import android.view.animation.AnimationUtils
 import android.widget.AdapterView
 import android.widget.ArrayAdapter
 import android.widget.Button
@@ -14,6 +15,7 @@ import android.widget.Spinner
 import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.view.doOnNextLayout
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -250,20 +252,74 @@ class MainActivity : AppCompatActivity() {
         libraryPane.visibility = if (which == LIBRARY) View.VISIBLE else View.GONE
         settingsList.visibility = if (which == SETTINGS) View.VISIBLE else View.GONE
         refresh.isEnabled = which == LIST
+        // The loading tiles belong to the list alone; left up they would cover the pane just switched to.
+        if (which != LIST) showSkeleton(false)
+        Motion.enter(when (which) {
+            LIBRARY -> libraryPane
+            SETTINGS -> settingsList
+            else -> grid
+        })
         markTabs(which)
         if (which == LIBRARY) refreshLibrary()
         if (which == SETTINGS) showSettings()
     }
 
     private fun markTabs(which: Int) {
-        tabLabel(R.id.tabLibraryLabel, which == LIBRARY)
-        tabLabel(R.id.tabListLabel, which == LIST)
-        tabLabel(R.id.tabSettingsLabel, which == SETTINGS)
-        tabLabel(R.id.tabOfflineLabel, false)
+        tabOn(R.id.tabLibraryLabel, R.id.tabLibraryIcon, which == LIBRARY)
+        tabOn(R.id.tabListLabel, R.id.tabListIcon, which == LIST)
+        tabOn(R.id.tabSettingsLabel, R.id.tabSettingsIcon, which == SETTINGS)
+        // Offline opens its own screen and Link is the accent action in the middle of the bar — the
+        // way TikTok's own + button is always red — so neither one ever takes the selected colour.
+        tabOn(R.id.tabOfflineLabel, R.id.tabOfflineIcon, false)
+        moveNavPill(which)
     }
 
-    private fun tabLabel(id: Int, on: Boolean) {
-        findViewById<TextView>(id).setTextColor(getColor(if (on) R.color.accent else R.color.muted))
+    /** Selected is the only state the labels and icons read; the colour itself lives in nav_label.xml. */
+    private fun tabOn(labelId: Int, iconId: Int, on: Boolean) {
+        findViewById<TextView>(labelId).isSelected = on
+        findViewById<View>(iconId).isSelected = on
+    }
+
+    /** One short bar that slides under the open tab, instead of five labels that all look red. */
+    private fun moveNavPill(which: Int) {
+        val tabId = when (which) {
+            LIBRARY -> R.id.tabLibrary
+            LIST -> R.id.tabList
+            SETTINGS -> R.id.tabSettings
+            else -> return
+        }
+        val tab = findViewById<View>(tabId)
+        val pill = findViewById<View>(R.id.navPill)
+        pill.visibility = View.VISIBLE
+        // A view that has never been laid out has no width to measure, and guessing puts the pill
+        // half a pill off-centre for the rest of the session. Waiting one layout costs nothing.
+        if (pill.width == 0) pill.doOnNextLayout { placeNavPill(tab, pill) } else placeNavPill(tab, pill)
+        Motion.pop(findViewById(tabIconOf(which)))
+    }
+
+    private fun placeNavPill(tab: View, pill: View) {
+        if (tab.width == 0) return
+        Motion.slide(pill, tab.left + tab.width / 2f - pill.width / 2f)
+    }
+
+    private fun tabIconOf(which: Int) = when (which) {
+        LIBRARY -> R.id.tabLibraryIcon
+        SETTINGS -> R.id.tabSettingsIcon
+        else -> R.id.tabListIcon
+    }
+
+    /** The tiles that are about to arrive, breathing in their own shape. */
+    private fun showSkeleton(on: Boolean) {
+        val pane = findViewById<View>(R.id.skeleton)
+        if (on) {
+            pane.visibility = View.VISIBLE
+            if (Motion.on(this)) {
+                pane.startAnimation(AnimationUtils.loadAnimation(this, R.anim.grab_shimmer))
+            }
+            return
+        }
+        pane.clearAnimation()
+        pane.visibility = View.GONE
     }
 
     /** Every number a Settings row shows costs a folder read, so they are taken together off-main. */
@@ -643,6 +699,7 @@ class MainActivity : AppCompatActivity() {
             libraryCache = saved
             libraryAdapter.selectMode = collectionMode
             libraryAdapter.submit(saved)
+            Motion.replay(libraryList)
             findViewById<TextView>(R.id.librarySort).text =
                 "${libraryOrders[libraryOrder().coerceIn(0, libraryOrders.size - 1)]} ▾"
             if (!collectionMode) {
@@ -749,6 +806,7 @@ class MainActivity : AppCompatActivity() {
         getSharedPreferences("ui", MODE_PRIVATE).edit()
             .putString("list_order", if (popular) "popular" else "latest").apply()
         adapter.setOrder(if (popular) GridAdapter.Order.POPULAR else GridAdapter.Order.LATEST)
+        Motion.replay(grid)
         paintListOrder()
         // Say it out loud, with the number the first cover now holds: a silent re-order looked
         // exactly like a tap that did nothing.
@@ -821,6 +879,7 @@ class MainActivity : AppCompatActivity() {
         refresh.isRefreshing = true
         showSection(LIST)
         statusView.text = getString(R.string.loading)
+        showSkeleton(true)
 
         task = lifecycleScope.launch {
             try {
@@ -833,6 +892,7 @@ class MainActivity : AppCompatActivity() {
                                 adapter.submit(fresh, Downloader.doneIds(this@MainActivity))
                                 shown = true
                                 refresh.isRefreshing = false
+                                showSkeleton(false)
                             } else {
                                 adapter.append(fresh)
                             }
@@ -867,6 +927,7 @@ class MainActivity : AppCompatActivity() {
             } finally {
                 loadBtn.isEnabled = true
                 refresh.isRefreshing = false
+                showSkeleton(false)
                 showSelection()
             }
         }
@@ -891,6 +952,7 @@ class MainActivity : AppCompatActivity() {
         statusView.text = if (single) "Reading the Instagram post…"
         else "Instagram profile — up to $cap posts, ~${cap * 9 / 10} MB of reading before any of it " +
             "is saved"
+        showSkeleton(true)
         val web = igWeb ?: InstagramWeb(this).also { igWeb = it }
 
         task = lifecycleScope.launch {
@@ -908,6 +970,7 @@ class MainActivity : AppCompatActivity() {
                 }
                 adapter.submit(clips, Downloader.doneIds(this@MainActivity))
                 refresh.isRefreshing = false
+                showSkeleton(false)
                 val first = clips.firstOrNull()
                 val already = clips.count { it.id in Downloader.doneIds(this@MainActivity) }
                 if (single && first != null) {
@@ -932,6 +995,7 @@ class MainActivity : AppCompatActivity() {
             } finally {
                 loadBtn.isEnabled = true
                 refresh.isRefreshing = false
+                showSkeleton(false)
                 showSelection()
             }
         }

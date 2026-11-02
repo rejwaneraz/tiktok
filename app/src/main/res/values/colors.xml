@@ -21,7 +21,11 @@
     <color name="field">#F1F1F2</color>
     <color name="pill">#F1F1F2</color>
     <color name="ripple">#1A161823</color>
+    <color name="ripple_on_accent">#40FFFFFF</color>
     <color name="selected_fill">#E4F6F4</color>
+
+    <!-- Section captions sat at the same grey as disabled text; this one is readable at 13sp. -->
+    <color name="section">#5A5C68</color>
 
     <color name="header_start">#FFFFFF</color>
     <color name="header_center">#F8F8F8</color>

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The loading tiles breathe instead of sitting there dead while a profile is being read. -->
+<alpha xmlns:android="http://schemas.android.com/apk/res/android"
+    android:duration="900"
+    android:fromAlpha="0.35"
+    android:interpolator="@android:anim/accelerate_decelerate_interpolator"
+    android:repeatCount="infinite"
+    android:repeatMode="reverse"
+    android:toAlpha="1.0" />

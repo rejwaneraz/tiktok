@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The screen being covered sinks back a little instead of vanishing in one frame. -->
+<set xmlns:android="http://schemas.android.com/apk/res/android"
+    android:interpolator="@interpolator/grab_exit">
+    <alpha
+        android:duration="@integer/dur_normal"
+        android:fromAlpha="1.0"
+        android:toAlpha="0.55" />
+    <scale
+        android:duration="@integer/dur_normal"
+        android:fromXScale="1.0"
+        android:fromYScale="1.0"
+        android:pivotX="50%"
+        android:pivotY="50%"
+        android:toXScale="0.96"
+        android:toYScale="0.96" />
+</set>

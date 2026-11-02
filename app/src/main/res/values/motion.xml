@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  How long things move. TikTok's own timings: a press answers in about 90 ms, an entry lands in
+  220-320 ms, a spring settles in 420 ms. Anything longer feels like waiting, anything shorter
+  reads as a glitch.
+-->
+<resources>
+    <integer name="dur_press">90</integer>
+    <integer name="dur_fast">140</integer>
+    <integer name="dur_normal">220</integer>
+    <integer name="dur_slow">320</integer>
+    <integer name="dur_spring">420</integer>
+    <integer name="dur_crossfade">180</integer>
+</resources>

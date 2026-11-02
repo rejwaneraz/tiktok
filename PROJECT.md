@@ -4,6 +4,10 @@ Every architectural choice, the evidence behind it, and the alternatives that we
 not paid for twice. Dates are the day the decision was made. Update this file whenever a decision
 changes — the old entry stays, marked as superseded.
 
+`BUILD.md` is the long-form companion: the whole file map, disk layout, data flows, threading rules,
+CI gates, measured Instagram limits, and the device test checklist. This file is *why*; that one is
+*what and where*.
+
 ## Ground rules that never change
 
 | Rule | Why |
@@ -333,6 +337,35 @@ itself and the system killed the process with `ForegroundServiceDidNotStartInTim
 checks the result: if the foreground start failed, it posts the plain notification instead and calls
 `stopSelf()` — the download queue lives in its own scope and does not need the service at all, so losing
 the service must never mean losing the batch or the app.
+
+### 2026-11-02 — the app was measured, and the complaint "smooth na" was not about speed
+
+adb against the real phone (RMX3710, Android 15) said: jank **3.81%** over eleven swipes, 99th percentile
+32 ms, no skipped frames in logcat, animation scales all **1.0**. Scrolling was never the problem. What
+was missing was *motion and feedback*: no `res/anim` folder existed, the theme had no
+`windowAnimationStyle`, no list had a `layoutAnimation`, and `btn_accent`/`pill_bg` were flat shapes with
+no pressed state — so every screen change was a hard cut and every tap was silent.
+
+So the fix is a motion layer, and it lives in resources rather than in the screens:
+
+| Piece | Where | Why there |
+|---|---|---|
+| Durations and curves | `values/motion.xml`, `interpolator/grab_*` | One place to change how the app feels |
+| Screen transitions | `anim/grab_screen_*`, `anim/grab_close_*` + `windowAnimationStyle` | Every activity, no code |
+| Press feedback | `anim/grab_press_scale.xml` as a `stateListAnimator`, plus ripples inside `btn_accent`, `btn_outline`, `pill_bg` | A drawable can answer a tap; a listener would have to fight the ones that already exist |
+| Lists arriving | `anim/grab_layout_items.xml` on each RecyclerView | A grid that pours in beats a grid that is suddenly there |
+| Everything else | `Motion.kt` | Pane swaps, the tab marker, the feed poster |
+
+`Motion.on()` reads `ANIMATOR_DURATION_SCALE` once and returns false when the phone has been told to stop
+moving; every code-driven animation goes through it, and `Motion.ms()` hands back zero. A hand-drawn
+animation that ignores that setting is a bug the user cannot work around.
+
+**No new dependency.** `SpringInterpolator` and `PathInterpolator` are platform (API 21+, and the floor is
+24), and the spring feel comes from one cubic curve — `0.34,1.56 0.64,1` — the same overshoot TikTok's own
+icons use. Lottie would have cost an APK and a data round trip for something three XML files do.
+
+Two things that were measured and are still not fixed: the **2568 ms cold start**, and the fact that a
+library of 397 files means the first folder scan is the longest thing the app does at launch.
 
 ## Measured, from a real request (2026-10-20)
 

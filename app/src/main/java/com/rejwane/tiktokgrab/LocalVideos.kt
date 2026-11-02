@@ -300,7 +300,7 @@ object LocalThumbs {
         cover.tag = video.key
         if (video.isPhoto) {
             // A picture is already a picture: no frame to seek, no duration to read.
-            cover.load(video.uri) { crossfade(false) }
+            cover.load(video.uri) { crossfade(Motion.ms(context, R.integer.dur_crossfade).toInt()) }
             badge?.text = ""
             return
         }
@@ -322,6 +322,24 @@ object LocalThumbs {
                     badge?.text = views.ifBlank { clock(video) }
                 }
             }
+        }
+    }
+
+    /** The frame we already hold, with no decode started: what the feed poster is made of. */
+    fun peek(video: LocalVideo): Bitmap? =
+        if (video.isPhoto) null else synchronized(cache) { cache.get(video.key) }
+
+    /**
+     * Pull the frame for a clip nobody has looked at yet, so the page the finger is heading to has a
+     * picture on it before the player is asked for one. A frame already held is handed straight back.
+     */
+    fun warm(context: Context, video: LocalVideo, onFrame: ((Bitmap) -> Unit)? = null) {
+        if (video.isPhoto) return
+        peek(video)?.let { onFrame?.invoke(it); return }
+        pool.execute {
+            val bmp = frame(context, video) ?: return@execute
+            synchronized(cache) { cache.put(video.key, bmp) }
+            if (onFrame != null) Handler(Looper.getMainLooper()).post { onFrame(bmp) }
         }
     }
 

@@ -9,12 +9,27 @@
         <item name="android:fontFamily">serif</item>
         <item name="android:textAllCaps">false</item>
         <item name="cornerRadius">12dp</item>
+        <item name="android:minHeight">@dimen/touch_min</item>
+        <item name="android:stateListAnimator">@anim/grab_press_scale</item>
     </style>
 
     <style name="Widget.Grab.Button.Outlined" parent="Widget.Material3.Button.OutlinedButton">
         <item name="android:fontFamily">serif</item>
         <item name="android:textAllCaps">false</item>
         <item name="cornerRadius">12dp</item>
+        <item name="android:minHeight">@dimen/touch_min</item>
+        <item name="android:stateListAnimator">@anim/grab_press_scale</item>
+    </style>
+
+    <!--
+      Screens used to appear by being pasted there in one frame. These four animations are the whole
+      difference between "the app changed page" and "the app moved".
+    -->
+    <style name="Animation.Grab.Window" parent="@android:style/Animation.Activity">
+        <item name="android:activityOpenEnterAnimation">@anim/grab_screen_enter</item>
+        <item name="android:activityOpenExitAnimation">@anim/grab_screen_exit</item>
+        <item name="android:activityCloseEnterAnimation">@anim/grab_close_enter</item>
+        <item name="android:activityCloseExitAnimation">@anim/grab_close_exit</item>
     </style>
 
     <style name="Theme.TikTokGrab" parent="Theme.Material3.DayNight.NoActionBar">
@@ -31,6 +46,7 @@
         <item name="android:textViewStyle">@style/Widget.Grab.Text</item>
         <item name="materialButtonStyle">@style/Widget.Grab.Button</item>
         <item name="materialButtonOutlinedStyle">@style/Widget.Grab.Button.Outlined</item>
+        <item name="android:windowAnimationStyle">@style/Animation.Grab.Window</item>
     </style>
 
     <!-- The feed is always the dark room TikTok keeps it in, whatever the list theme is. -->

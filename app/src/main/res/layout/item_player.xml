@@ -48,10 +48,13 @@
 
         <ImageView
             android:id="@+id/pLike"
-            android:layout_width="32dp"
-            android:layout_height="32dp"
-            android:layout_marginTop="12dp"
+            android:layout_width="@dimen/rail_touch"
+            android:layout_height="@dimen/rail_touch"
+            android:layout_marginTop="@dimen/space_s"
             android:contentDescription="@null"
+            android:padding="@dimen/rail_pad"
+            android:scaleType="fitCenter"
+            android:stateListAnimator="@anim/grab_press_scale"
             android:src="@drawable/rail_heart" />
 
         <TextView
@@ -62,15 +65,18 @@
             android:shadowColor="#80000000"
             android:shadowRadius="4"
             android:textColor="@color/on_video"
-            android:textSize="12sp"
+            android:textSize="@dimen/text_caption"
             android:textStyle="bold" />
 
         <ImageView
             android:id="@+id/pComment"
-            android:layout_width="32dp"
-            android:layout_height="32dp"
-            android:layout_marginTop="12dp"
+            android:layout_width="@dimen/rail_touch"
+            android:layout_height="@dimen/rail_touch"
+            android:layout_marginTop="@dimen/space_s"
             android:contentDescription="@null"
+            android:padding="@dimen/rail_pad"
+            android:scaleType="fitCenter"
+            android:stateListAnimator="@anim/grab_press_scale"
             android:src="@drawable/rail_comment" />
 
         <TextView
@@ -81,15 +87,18 @@
             android:shadowColor="#80000000"
             android:shadowRadius="4"
             android:textColor="@color/on_video"
-            android:textSize="12sp"
+            android:textSize="@dimen/text_caption"
             android:textStyle="bold" />
 
         <ImageView
             android:id="@+id/pMark"
-            android:layout_width="32dp"
-            android:layout_height="32dp"
-            android:layout_marginTop="12dp"
+            android:layout_width="@dimen/rail_touch"
+            android:layout_height="@dimen/rail_touch"
+            android:layout_marginTop="@dimen/space_s"
             android:contentDescription="@null"
+            android:padding="@dimen/rail_pad"
+            android:scaleType="fitCenter"
+            android:stateListAnimator="@anim/grab_press_scale"
             android:src="@drawable/rail_download" />
 
         <TextView
@@ -100,15 +109,18 @@
             android:shadowColor="#80000000"
             android:shadowRadius="4"
             android:textColor="@color/on_video"
-            android:textSize="12sp"
+            android:textSize="@dimen/text_caption"
             android:textStyle="bold" />
 
         <ImageView
             android:id="@+id/pShare"
-            android:layout_width="32dp"
-            android:layout_height="32dp"
-            android:layout_marginTop="12dp"
+            android:layout_width="@dimen/rail_touch"
+            android:layout_height="@dimen/rail_touch"
+            android:layout_marginTop="@dimen/space_s"
             android:contentDescription="@null"
+            android:padding="@dimen/rail_pad"
+            android:scaleType="fitCenter"
+            android:stateListAnimator="@anim/grab_press_scale"
             android:src="@drawable/rail_share" />
 
         <TextView
@@ -119,7 +131,7 @@
             android:shadowColor="#80000000"
             android:shadowRadius="4"
             android:textColor="@color/on_video"
-            android:textSize="12sp"
+            android:textSize="@dimen/text_caption"
             android:textStyle="bold" />
     </LinearLayout>
 
@@ -171,7 +183,7 @@
             android:shadowColor="#80000000"
             android:shadowRadius="4"
             android:textColor="@color/on_video_muted"
-            android:textSize="12sp" />
+            android:textSize="@dimen/text_caption" />
     </LinearLayout>
 
 </FrameLayout>

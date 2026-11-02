@@ -63,7 +63,7 @@
             android:shadowRadius="4"
             android:text="@string/save"
             android:textColor="@color/on_video"
-            android:textSize="11sp" />
+            android:textSize="@dimen/text_caption" />
     </LinearLayout>
 
     <TextView

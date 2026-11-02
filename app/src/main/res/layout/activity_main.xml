@@ -10,10 +10,10 @@
         android:background="@drawable/header_bg"
         android:gravity="center_vertical"
         android:orientation="horizontal"
-        android:paddingStart="14dp"
-        android:paddingTop="12dp"
-        android:paddingEnd="10dp"
-        android:paddingBottom="12dp">
+        android:paddingStart="@dimen/space_l"
+        android:paddingTop="@dimen/space_m"
+        android:paddingEnd="@dimen/space_m"
+        android:paddingBottom="@dimen/space_m">
 
         <TextView
             android:layout_width="0dp"
@@ -22,22 +22,22 @@
             android:letterSpacing="0.02"
             android:text="@string/app_name"
             android:textColor="@color/text"
-            android:textSize="19sp"
+            android:textSize="@dimen/text_title"
             android:textStyle="bold" />
 
         <TextView
             android:id="@+id/loginStatus"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginEnd="8dp"
+            android:layout_marginEnd="@dimen/space_s"
             android:background="@drawable/pill_bg"
-            android:paddingStart="10dp"
-            android:paddingTop="4dp"
-            android:paddingEnd="10dp"
-            android:paddingBottom="4dp"
+            android:paddingStart="@dimen/space_m"
+            android:paddingTop="@dimen/space_xs"
+            android:paddingEnd="@dimen/space_m"
+            android:paddingBottom="@dimen/space_xs"
             android:text="@string/not_logged_in"
             android:textColor="@color/muted"
-            android:textSize="11sp" />
+            android:textSize="@dimen/text_caption" />
 
         <Button
             android:id="@+id/loginBtn"
@@ -45,22 +45,20 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:minWidth="0dp"
-            android:minHeight="0dp"
-            android:paddingStart="12dp"
-            android:paddingTop="6dp"
-            android:paddingEnd="12dp"
-            android:paddingBottom="6dp"
+            android:minHeight="@dimen/touch_min"
+            android:paddingStart="@dimen/space_m"
+            android:paddingEnd="@dimen/space_m"
             android:text="@string/login"
-            android:textSize="11sp" />
+            android:textSize="@dimen/text_caption" />
     </LinearLayout>
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
-        android:paddingStart="12dp"
-        android:paddingTop="10dp"
-        android:paddingEnd="12dp">
+        android:paddingStart="@dimen/space_m"
+        android:paddingTop="@dimen/space_s"
+        android:paddingEnd="@dimen/space_m">
 
         <EditText
             android:id="@+id/input"
@@ -73,37 +71,41 @@
             android:importantForAutofill="no"
             android:inputType="textUri"
             android:maxLines="1"
-            android:padding="11dp"
+            android:minHeight="@dimen/touch_min"
+            android:padding="@dimen/space_m"
             android:textColor="@color/text"
             android:textColorHint="@color/muted"
-            android:textSize="14sp" />
+            android:textSize="@dimen/text_body" />
 
         <Button
             android:id="@+id/loadBtn"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_gravity="center_vertical"
-            android:layout_marginStart="8dp"
+            android:layout_marginStart="@dimen/space_s"
             android:minWidth="0dp"
-            android:paddingStart="14dp"
-            android:paddingEnd="14dp"
+            android:minHeight="@dimen/touch_min"
+            android:paddingStart="@dimen/space_l"
+            android:paddingEnd="@dimen/space_l"
             android:text="@string/load"
-            android:textSize="12sp" />
+            android:textSize="@dimen/text_body" />
     </LinearLayout>
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="6dp"
+        android:layout_marginTop="@dimen/space_xs"
         android:gravity="center_vertical"
+        android:minHeight="@dimen/touch_min"
         android:orientation="horizontal"
-        android:paddingStart="12dp"
-        android:paddingEnd="12dp">
+        android:paddingStart="@dimen/space_m"
+        android:paddingEnd="@dimen/space_m">
 
         <Spinner
             android:id="@+id/countPick"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:minHeight="@dimen/touch_min"
             android:minWidth="104dp" />
 
         <TextView
@@ -113,21 +115,25 @@
             android:layout_marginStart="10dp"
             android:layout_weight="1"
             android:textColor="@color/muted"
-            android:textSize="11sp" />
+            android:textSize="@dimen/text_caption" />
 
         <TextView
             android:id="@+id/orderChip"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginStart="8dp"
+            android:layout_marginStart="@dimen/space_s"
             android:background="@drawable/pill_bg"
-            android:paddingStart="10dp"
-            android:paddingTop="4dp"
-            android:paddingEnd="10dp"
-            android:paddingBottom="4dp"
+            android:clickable="true"
+            android:focusable="true"
+            android:gravity="center"
+            android:minHeight="@dimen/touch_min"
+            android:paddingStart="@dimen/space_m"
+            android:paddingTop="@dimen/space_xs"
+            android:paddingEnd="@dimen/space_m"
+            android:paddingBottom="@dimen/space_xs"
             android:text="Latest ▾"
             android:textColor="@color/text"
-            android:textSize="11sp" />
+            android:textSize="@dimen/text_caption" />
     </LinearLayout>
 
     <TextView
@@ -137,30 +143,30 @@
         android:layout_marginTop="2dp"
         android:ellipsize="end"
         android:maxLines="2"
-        android:paddingStart="12dp"
-        android:paddingEnd="12dp"
-        android:paddingBottom="4dp"
+        android:paddingStart="@dimen/space_m"
+        android:paddingEnd="@dimen/space_m"
+        android:paddingBottom="@dimen/space_xs"
         android:textColor="@color/muted"
-        android:textSize="12sp" />
+        android:textSize="@dimen/text_caption" />
 
     <ProgressBar
         android:id="@+id/progress"
         style="?android:attr/progressBarStyleHorizontal"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginStart="12dp"
-        android:layout_marginEnd="12dp"
+        android:layout_height="6dp"
+        android:layout_marginStart="@dimen/space_m"
+        android:layout_marginEnd="@dimen/space_m"
         android:max="100"
-        android:progressTint="@color/selected" />
+        android:progressDrawable="@drawable/progress_grab" />
 
     <LinearLayout
         android:id="@+id/selectBar"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="4dp"
+        android:layout_marginTop="@dimen/space_xs"
         android:background="@color/card"
         android:orientation="vertical"
-        android:padding="6dp"
+        android:padding="@dimen/space_s"
         android:visibility="gone">
 
         <TextView
@@ -168,12 +174,12 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:textColor="@color/text"
-            android:textSize="12sp" />
+            android:textSize="@dimen/text_body" />
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
+            android:layout_marginTop="@dimen/space_xs"
             android:orientation="horizontal">
 
             <Button
@@ -183,65 +189,60 @@
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
                 android:minWidth="0dp"
-                android:minHeight="0dp"
-                android:padding="6dp"
+                android:padding="@dimen/space_s"
                 android:text="@string/tick_all"
-                android:textSize="11sp" />
+                android:textSize="@dimen/text_caption" />
 
             <Button
                 android:id="@+id/onlyNew"
                 style="?attr/materialButtonOutlinedStyle"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:layout_marginStart="4dp"
+                android:layout_marginStart="@dimen/space_xs"
                 android:layout_weight="1"
                 android:minWidth="0dp"
-                android:minHeight="0dp"
-                android:padding="6dp"
+                android:padding="@dimen/space_s"
                 android:text="@string/only_new"
-                android:textSize="11sp" />
+                android:textSize="@dimen/text_caption" />
 
             <Button
                 android:id="@+id/retryBtn"
                 style="?attr/materialButtonOutlinedStyle"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:layout_marginStart="4dp"
+                android:layout_marginStart="@dimen/space_xs"
                 android:layout_weight="1"
                 android:minWidth="0dp"
-                android:minHeight="0dp"
-                android:padding="6dp"
+                android:padding="@dimen/space_s"
                 android:text="@string/retry_failed"
-                android:textSize="11sp"
+                android:textSize="@dimen/text_caption"
                 android:visibility="gone" />
 
             <Button
                 android:id="@+id/downloadBtn"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:layout_marginStart="4dp"
+                android:layout_marginStart="@dimen/space_xs"
                 android:layout_weight="1"
                 android:drawableStart="@drawable/rail_download"
-                android:drawablePadding="4dp"
+                android:drawablePadding="@dimen/space_xs"
                 android:drawableTint="@color/on_accent"
                 android:minWidth="0dp"
-                android:minHeight="0dp"
-                android:padding="6dp"
+                android:padding="@dimen/space_s"
                 android:text="@string/download"
-                android:textSize="11sp" />
+                android:textSize="@dimen/text_caption" />
 
             <Button
                 android:id="@+id/exitSelect"
                 style="?attr/materialButtonOutlinedStyle"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:layout_marginStart="4dp"
+                android:layout_marginStart="@dimen/space_xs"
                 android:layout_weight="0.7"
                 android:minWidth="0dp"
-                android:minHeight="0dp"
-                android:padding="6dp"
+                android:padding="@dimen/space_s"
                 android:text="@string/exit"
-                android:textSize="11sp" />
+                android:textSize="@dimen/text_caption" />
         </LinearLayout>
     </LinearLayout>
 
@@ -260,7 +261,8 @@
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
                 android:clipToPadding="false"
-                android:padding="6dp" />
+                android:layoutAnimation="@anim/grab_layout_items"
+                android:padding="@dimen/space_s" />
 
             <LinearLayout
                 android:id="@+id/libraryPane"
@@ -272,38 +274,43 @@
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
+                    android:layout_marginTop="@dimen/space_s"
                     android:gravity="center_vertical"
+                    android:minHeight="@dimen/touch_min"
                     android:orientation="horizontal"
-                    android:paddingStart="14dp"
-                    android:paddingEnd="14dp">
+                    android:paddingStart="@dimen/space_l"
+                    android:paddingEnd="@dimen/space_l">
 
                     <TextView
                         android:id="@+id/librarySort"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:background="@drawable/pill_bg"
-                        android:paddingStart="12dp"
-                        android:paddingTop="6dp"
-                        android:paddingEnd="12dp"
-                        android:paddingBottom="6dp"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:gravity="center"
+                        android:minHeight="@dimen/touch_min"
+                        android:paddingStart="@dimen/space_l"
+                        android:paddingEnd="@dimen/space_l"
                         android:text="Newest first ▾"
                         android:textColor="@color/text"
-                        android:textSize="12sp" />
+                        android:textSize="@dimen/text_body" />
 
                     <TextView
                         android:id="@+id/libraryNew"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:layout_marginStart="8dp"
+                        android:layout_marginStart="@dimen/space_s"
                         android:background="@drawable/pill_bg"
-                        android:paddingStart="12dp"
-                        android:paddingTop="6dp"
-                        android:paddingEnd="12dp"
-                        android:paddingBottom="6dp"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:gravity="center"
+                        android:minHeight="@dimen/touch_min"
+                        android:paddingStart="@dimen/space_l"
+                        android:paddingEnd="@dimen/space_l"
                         android:text="+ Collection"
                         android:textColor="@color/accent"
-                        android:textSize="12sp"
+                        android:textSize="@dimen/text_body"
                         android:textStyle="bold" />
                 </LinearLayout>
 
@@ -313,7 +320,8 @@
                     android:layout_height="0dp"
                     android:layout_weight="1"
                     android:clipToPadding="false"
-                    android:padding="6dp" />
+                    android:layoutAnimation="@anim/grab_layout_items"
+                    android:padding="@dimen/space_s" />
 
                 <LinearLayout
                     android:id="@+id/libraryBar"
@@ -321,10 +329,10 @@
                     android:layout_height="wrap_content"
                     android:gravity="center_vertical"
                     android:orientation="horizontal"
-                    android:paddingStart="14dp"
-                    android:paddingTop="8dp"
-                    android:paddingEnd="14dp"
-                    android:paddingBottom="8dp"
+                    android:paddingStart="@dimen/space_l"
+                    android:paddingTop="@dimen/space_s"
+                    android:paddingEnd="@dimen/space_l"
+                    android:paddingBottom="@dimen/space_s"
                     android:visibility="gone">
 
                     <TextView
@@ -333,17 +341,16 @@
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
                         android:textColor="@color/text"
-                        android:textSize="13sp" />
+                        android:textSize="@dimen/text_row" />
 
                     <Button
                         android:id="@+id/libraryAdd"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:minWidth="0dp"
-                        android:minHeight="0dp"
-                        android:padding="8dp"
+                        android:padding="@dimen/space_s"
                         android:text="Add"
-                        android:textSize="12sp" />
+                        android:textSize="@dimen/text_body" />
 
                     <Button
                         android:id="@+id/libraryCancel"
@@ -352,10 +359,9 @@
                         android:layout_height="wrap_content"
                         android:layout_marginStart="6dp"
                         android:minWidth="0dp"
-                        android:minHeight="0dp"
-                        android:padding="8dp"
+                        android:padding="@dimen/space_s"
                         android:text="Cancel"
-                        android:textSize="12sp" />
+                        android:textSize="@dimen/text_body" />
                 </LinearLayout>
             </LinearLayout>
 
@@ -365,8 +371,11 @@
                 android:layout_height="match_parent"
                 android:background="@color/bg"
                 android:clipToPadding="false"
-                android:paddingBottom="10dp"
+                android:layoutAnimation="@anim/grab_layout_items"
+                android:paddingBottom="@dimen/space_m"
                 android:visibility="gone" />
+
+            <include layout="@layout/pane_skeleton" />
         </FrameLayout>
     </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
 
@@ -375,156 +384,193 @@
         android:layout_height="1dp"
         android:background="@color/stroke" />
 
-    <LinearLayout
+    <FrameLayout
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:background="@color/card"
-        android:baselineAligned="false"
-        android:orientation="horizontal"
-        android:paddingTop="4dp"
-        android:paddingBottom="6dp">
+        android:layout_height="wrap_content">
 
         <LinearLayout
-            android:id="@+id/tabLibrary"
-            android:layout_width="0dp"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:background="@drawable/card_ripple"
-            android:clickable="true"
-            android:focusable="true"
-            android:gravity="center"
-            android:orientation="vertical"
-            android:paddingTop="6dp"
-            android:paddingBottom="6dp">
+            android:background="@color/card"
+            android:baselineAligned="false"
+            android:orientation="horizontal"
+            android:paddingTop="@dimen/space_xs"
+            android:paddingBottom="@dimen/space_s">
 
-            <ImageView
-                android:layout_width="22dp"
-                android:layout_height="22dp"
-                android:contentDescription="@null"
-                android:src="@drawable/ic_library" />
-
-            <TextView
-                android:id="@+id/tabLibraryLabel"
-                android:layout_width="wrap_content"
+            <LinearLayout
+                android:id="@+id/tabLibrary"
+                android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:text="@string/tab_library"
-                android:textColor="@color/muted"
-                android:textSize="11sp" />
+                android:layout_weight="1"
+                android:background="@drawable/card_ripple"
+                android:clickable="true"
+                android:focusable="true"
+                android:gravity="center"
+                android:minHeight="@dimen/touch_row"
+                android:orientation="vertical"
+                android:paddingTop="@dimen/space_s"
+                android:paddingBottom="@dimen/space_s"
+                android:stateListAnimator="@anim/grab_press_scale">
+
+                <ImageView
+                    android:id="@+id/tabLibraryIcon"
+                    android:layout_width="@dimen/nav_icon"
+                    android:layout_height="@dimen/nav_icon"
+                    android:contentDescription="@null"
+                    android:src="@drawable/ic_library"
+                    android:tint="@color/nav_label" />
+
+                <TextView
+                    android:id="@+id/tabLibraryLabel"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:text="@string/tab_library"
+                    android:textColor="@color/nav_label"
+                    android:textSize="@dimen/text_caption" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/tabOffline"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:background="@drawable/card_ripple"
+                android:clickable="true"
+                android:focusable="true"
+                android:gravity="center"
+                android:minHeight="@dimen/touch_row"
+                android:orientation="vertical"
+                android:paddingTop="@dimen/space_s"
+                android:paddingBottom="@dimen/space_s"
+                android:stateListAnimator="@anim/grab_press_scale">
+
+                <ImageView
+                    android:id="@+id/tabOfflineIcon"
+                    android:layout_width="@dimen/nav_icon"
+                    android:layout_height="@dimen/nav_icon"
+                    android:contentDescription="@null"
+                    android:src="@drawable/ic_offline"
+                    android:tint="@color/nav_label" />
+
+                <TextView
+                    android:id="@+id/tabOfflineLabel"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:text="@string/tab_offline"
+                    android:textColor="@color/nav_label"
+                    android:textSize="@dimen/text_caption" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/clipBtn"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:background="@drawable/card_ripple"
+                android:clickable="true"
+                android:focusable="true"
+                android:gravity="center"
+                android:minHeight="@dimen/touch_row"
+                android:orientation="vertical"
+                android:paddingTop="@dimen/space_s"
+                android:paddingBottom="@dimen/space_s"
+                android:stateListAnimator="@anim/grab_press_scale">
+
+                <ImageView
+                    android:layout_width="26dp"
+                    android:layout_height="26dp"
+                    android:contentDescription="@null"
+                    android:src="@drawable/ic_paste"
+                    android:tint="@color/accent" />
+
+                <TextView
+                    android:id="@+id/clipBtnLabel"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:text="@string/clip_button"
+                    android:textColor="@color/accent"
+                    android:textSize="@dimen/text_caption"
+                    android:textStyle="bold" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/tabList"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:background="@drawable/card_ripple"
+                android:clickable="true"
+                android:focusable="true"
+                android:gravity="center"
+                android:minHeight="@dimen/touch_row"
+                android:orientation="vertical"
+                android:paddingTop="@dimen/space_s"
+                android:paddingBottom="@dimen/space_s"
+                android:stateListAnimator="@anim/grab_press_scale">
+
+                <ImageView
+                    android:id="@+id/tabListIcon"
+                    android:layout_width="@dimen/nav_icon"
+                    android:layout_height="@dimen/nav_icon"
+                    android:contentDescription="@null"
+                    android:src="@drawable/ic_grid"
+                    android:tint="@color/nav_label" />
+
+                <TextView
+                    android:id="@+id/tabListLabel"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:text="@string/tab_list"
+                    android:textColor="@color/nav_label"
+                    android:textSize="@dimen/text_caption" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/tabSettings"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:background="@drawable/card_ripple"
+                android:clickable="true"
+                android:focusable="true"
+                android:gravity="center"
+                android:minHeight="@dimen/touch_row"
+                android:orientation="vertical"
+                android:paddingTop="@dimen/space_s"
+                android:paddingBottom="@dimen/space_s"
+                android:stateListAnimator="@anim/grab_press_scale">
+
+                <ImageView
+                    android:id="@+id/tabSettingsIcon"
+                    android:layout_width="@dimen/nav_icon"
+                    android:layout_height="@dimen/nav_icon"
+                    android:contentDescription="@null"
+                    android:src="@drawable/ic_settings"
+                    android:tint="@color/nav_label" />
+
+                <TextView
+                    android:id="@+id/tabSettingsLabel"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:text="@string/tab_settings"
+                    android:textColor="@color/nav_label"
+                    android:textSize="@dimen/text_caption" />
+            </LinearLayout>
         </LinearLayout>
 
-        <LinearLayout
-            android:id="@+id/tabOffline"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:background="@drawable/card_ripple"
-            android:clickable="true"
-            android:focusable="true"
-            android:gravity="center"
-            android:orientation="vertical"
-            android:paddingTop="6dp"
-            android:paddingBottom="6dp">
-
-            <ImageView
-                android:layout_width="22dp"
-                android:layout_height="22dp"
-                android:contentDescription="@null"
-                android:src="@drawable/ic_offline" />
-
-            <TextView
-                android:id="@+id/tabOfflineLabel"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="@string/tab_offline"
-                android:textColor="@color/muted"
-                android:textSize="11sp" />
-        </LinearLayout>
-
-        <LinearLayout
-            android:id="@+id/clipBtn"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:background="@drawable/card_ripple"
-            android:clickable="true"
-            android:focusable="true"
-            android:gravity="center"
-            android:orientation="vertical"
-            android:paddingTop="6dp"
-            android:paddingBottom="6dp">
-
-            <ImageView
-                android:layout_width="26dp"
-                android:layout_height="26dp"
-                android:contentDescription="@null"
-                android:src="@drawable/ic_paste"
-                android:tint="@color/accent" />
-
-            <TextView
-                android:id="@+id/clipBtnLabel"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="@string/clip_button"
-                android:textColor="@color/accent"
-                android:textSize="11sp"
-                android:textStyle="bold" />
-        </LinearLayout>
-
-        <LinearLayout
-            android:id="@+id/tabList"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:background="@drawable/card_ripple"
-            android:clickable="true"
-            android:focusable="true"
-            android:gravity="center"
-            android:orientation="vertical"
-            android:paddingTop="6dp"
-            android:paddingBottom="6dp">
-
-            <ImageView
-                android:layout_width="22dp"
-                android:layout_height="22dp"
-                android:contentDescription="@null"
-                android:src="@drawable/ic_grid" />
-
-            <TextView
-                android:id="@+id/tabListLabel"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="@string/tab_list"
-                android:textColor="@color/muted"
-                android:textSize="11sp" />
-        </LinearLayout>
-
-        <LinearLayout
-            android:id="@+id/tabSettings"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:background="@drawable/card_ripple"
-            android:clickable="true"
-            android:focusable="true"
-            android:gravity="center"
-            android:orientation="vertical"
-            android:paddingTop="6dp"
-            android:paddingBottom="6dp">
-
-            <ImageView
-                android:layout_width="22dp"
-                android:layout_height="22dp"
-                android:contentDescription="@null"
-                android:src="@drawable/ic_settings" />
-
-            <TextView
-                android:id="@+id/tabSettingsLabel"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="@string/tab_settings"
-                android:textColor="@color/muted"
-                android:textSize="11sp" />
-        </LinearLayout>
-    </LinearLayout>
+        <View
+            android:id="@+id/navPill"
+            android:layout_width="26dp"
+            android:layout_height="3dp"
+            android:layout_gravity="bottom|start"
+            android:layout_marginBottom="2dp"
+            android:background="@drawable/nav_pill"
+            android:visibility="gone" />
+    </FrameLayout>
 
 </LinearLayout>

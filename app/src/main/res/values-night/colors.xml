@@ -15,7 +15,10 @@
     <color name="field">#1F2129</color>
     <color name="pill">#1F2129</color>
     <color name="ripple">#33FFFFFF</color>
+    <color name="ripple_on_accent">#40FFFFFF</color>
     <color name="selected_fill">#0E2A2C</color>
+
+    <color name="section">#C6C8D4</color>
 
     <color name="header_start">#161823</color>
     <color name="header_center">#1B1E2A</color>

@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- One cell arriving. The overshoot is what makes a grid look poured in rather than pasted. -->
+<set xmlns:android="http://schemas.android.com/apk/res/android">
+    <alpha
+        android:duration="@integer/dur_fast"
+        android:fromAlpha="0.0"
+        android:toAlpha="1.0" />
+    <scale
+        android:duration="@integer/dur_normal"
+        android:fromXScale="0.88"
+        android:fromYScale="0.88"
+        android:interpolator="@interpolator/grab_overshoot"
+        android:pivotX="50%"
+        android:pivotY="50%"
+        android:toXScale="1.0"
+        android:toYScale="1.0" />
+    <translate
+        android:duration="@integer/dur_normal"
+        android:fromYDelta="8%p"
+        android:interpolator="@interpolator/grab_enter"
+        android:toYDelta="0" />
+</set>

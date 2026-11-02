@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  One place for the sizes the app draws with. The layouts used to carry ~430 numbers of their own;
+  these are the ones that actually changed the look: text that was too small to read, and tap areas
+  that were smaller than a finger.
+-->
+<resources>
+    <!-- Type. 11sp/12sp measured on the phone were unreadable, so nothing sits below 13sp now. -->
+    <dimen name="text_caption">13sp</dimen>
+    <dimen name="text_body">14sp</dimen>
+    <dimen name="text_row">16sp</dimen>
+    <dimen name="text_title">19sp</dimen>
+    <dimen name="text_head">22sp</dimen>
+
+    <!-- Touch: Android's own floor is 48dp, and five controls were measured under it. -->
+    <dimen name="touch_min">48dp</dimen>
+    <dimen name="touch_row">56dp</dimen>
+
+    <!-- Spacing rhythm. -->
+    <dimen name="space_xs">4dp</dimen>
+    <dimen name="space_s">8dp</dimen>
+    <dimen name="space_m">12dp</dimen>
+    <dimen name="space_l">16dp</dimen>
+
+    <dimen name="radius_card">12dp</dimen>
+    <dimen name="radius_pill">22dp</dimen>
+
+    <dimen name="nav_icon">24dp</dimen>
+    <!-- The rail icon is 34 dp of picture inside a 48 dp of finger. -->
+    <dimen name="rail_touch">48dp</dimen>
+    <dimen name="rail_pad">7dp</dimen>
+</resources>

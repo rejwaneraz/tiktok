@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A new screen comes up: it rises a little, grows to full size, and fades in. -->
+<set xmlns:android="http://schemas.android.com/apk/res/android"
+    android:interpolator="@interpolator/grab_enter">
+    <alpha
+        android:duration="@integer/dur_slow"
+        android:fromAlpha="0.0"
+        android:toAlpha="1.0" />
+    <scale
+        android:duration="@integer/dur_slow"
+        android:fromXScale="0.93"
+        android:fromYScale="0.93"
+        android:pivotX="50%"
+        android:pivotY="50%"
+        android:toXScale="1.0"
+        android:toYScale="1.0" />
+    <translate
+        android:duration="@integer/dur_slow"
+        android:fromYDelta="7%p"
+        android:toYDelta="0" />
+</set>

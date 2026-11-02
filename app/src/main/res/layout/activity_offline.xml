@@ -80,7 +80,7 @@
                 android:paddingEnd="8dp"
                 android:paddingBottom="2dp"
                 android:textColor="@color/on_video_muted"
-                android:textSize="11sp" />
+                android:textSize="@dimen/text_caption" />
 
             <TextView
                 android:id="@+id/offlineEmpty"
@@ -150,6 +150,7 @@
 
             <androidx.recyclerview.widget.RecyclerView
                 android:id="@+id/exploreGrid"
+                android:layoutAnimation="@anim/grab_layout_items"
                 android:layout_width="match_parent"
                 android:layout_height="0dp"
                 android:layout_marginTop="8dp"
@@ -158,6 +159,7 @@
 
         <androidx.recyclerview.widget.RecyclerView
             android:id="@+id/authorList"
+            android:layoutAnimation="@anim/grab_layout_items"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:background="@color/bg"
@@ -484,6 +486,7 @@
 
             <androidx.recyclerview.widget.RecyclerView
                 android:id="@+id/profileGrid"
+                android:layoutAnimation="@anim/grab_layout_items"
                 android:layout_width="match_parent"
                 android:layout_height="0dp"
                 android:layout_weight="1" />
@@ -513,13 +516,15 @@
             android:clickable="true"
             android:focusable="true"
             android:gravity="center"
+            android:minHeight="@dimen/touch_row"
             android:orientation="vertical"
-            android:paddingTop="6dp"
-            android:paddingBottom="6dp">
+            android:paddingTop="@dimen/space_s"
+            android:paddingBottom="@dimen/space_s"
+            android:stateListAnimator="@anim/grab_press_scale">
 
             <ImageView
-                android:layout_width="22dp"
-                android:layout_height="22dp"
+                android:layout_width="@dimen/nav_icon"
+                android:layout_height="@dimen/nav_icon"
                 android:contentDescription="@null"
                 android:src="@drawable/ic_home" />
 
@@ -529,7 +534,7 @@
                 android:layout_height="wrap_content"
                 android:text="@string/nav_home"
                 android:textColor="@color/muted"
-                android:textSize="11sp" />
+                android:textSize="@dimen/text_caption" />
         </LinearLayout>
 
         <LinearLayout
@@ -541,13 +546,15 @@
             android:clickable="true"
             android:focusable="true"
             android:gravity="center"
+            android:minHeight="@dimen/touch_row"
             android:orientation="vertical"
-            android:paddingTop="6dp"
-            android:paddingBottom="6dp">
+            android:paddingTop="@dimen/space_s"
+            android:paddingBottom="@dimen/space_s"
+            android:stateListAnimator="@anim/grab_press_scale">
 
             <ImageView
-                android:layout_width="22dp"
-                android:layout_height="22dp"
+                android:layout_width="@dimen/nav_icon"
+                android:layout_height="@dimen/nav_icon"
                 android:contentDescription="@null"
                 android:src="@drawable/ic_grid" />
 
@@ -557,7 +564,7 @@
                 android:layout_height="wrap_content"
                 android:text="@string/nav_explore"
                 android:textColor="@color/muted"
-                android:textSize="11sp" />
+                android:textSize="@dimen/text_caption" />
         </LinearLayout>
 
         <LinearLayout
@@ -569,9 +576,11 @@
             android:clickable="true"
             android:focusable="true"
             android:gravity="center"
+            android:minHeight="@dimen/touch_row"
             android:orientation="vertical"
-            android:paddingTop="6dp"
-            android:paddingBottom="6dp">
+            android:paddingTop="@dimen/space_s"
+            android:paddingBottom="@dimen/space_s"
+            android:stateListAnimator="@anim/grab_press_scale">
 
             <ImageView
                 android:layout_width="30dp"
@@ -587,7 +596,7 @@
                 android:layout_height="wrap_content"
                 android:text="@string/nav_add"
                 android:textColor="@color/muted"
-                android:textSize="11sp" />
+                android:textSize="@dimen/text_caption" />
         </LinearLayout>
 
         <LinearLayout
@@ -599,13 +608,15 @@
             android:clickable="true"
             android:focusable="true"
             android:gravity="center"
+            android:minHeight="@dimen/touch_row"
             android:orientation="vertical"
-            android:paddingTop="6dp"
-            android:paddingBottom="6dp">
+            android:paddingTop="@dimen/space_s"
+            android:paddingBottom="@dimen/space_s"
+            android:stateListAnimator="@anim/grab_press_scale">
 
             <ImageView
-                android:layout_width="22dp"
-                android:layout_height="22dp"
+                android:layout_width="@dimen/nav_icon"
+                android:layout_height="@dimen/nav_icon"
                 android:contentDescription="@null"
                 android:src="@drawable/ic_profile" />
 
@@ -615,7 +626,7 @@
                 android:layout_height="wrap_content"
                 android:text="@string/nav_me"
                 android:textColor="@color/muted"
-                android:textSize="11sp" />
+                android:textSize="@dimen/text_caption" />
         </LinearLayout>
     </LinearLayout>
 

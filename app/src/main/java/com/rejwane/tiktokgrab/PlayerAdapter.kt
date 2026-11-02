@@ -6,6 +6,7 @@ import android.view.LayoutInflater
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
+import android.view.animation.AnimationUtils
 import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.ProgressBar
@@ -170,9 +171,14 @@ class PlayerAdapter(
                 translationY = y - 60f
             }
             (itemView as FrameLayout).addView(pop)
-            pop.animate().scaleX(1.4f).scaleY(1.4f).alpha(0f).setDuration(650L).withEndAction {
-                (itemView as FrameLayout).removeView(pop)
-            }.start()
+            pop.scaleX = 0.4f
+            pop.scaleY = 0.4f
+            pop.animate().scaleX(1.4f).scaleY(1.4f).alpha(0f).setDuration(650L)
+                .setInterpolator(AnimationUtils.loadInterpolator(
+                    itemView.context, R.interpolator.grab_overshoot))
+                .withEndAction {
+                    (itemView as FrameLayout).removeView(pop)
+                }.start()
         }
 
         fun watch() {

@@ -5,11 +5,13 @@
     android:layout_height="wrap_content"
     android:foreground="@drawable/card_ripple"
     android:gravity="center_vertical"
+    android:minHeight="@dimen/touch_row"
     android:orientation="horizontal"
-    android:paddingStart="12dp"
-    android:paddingTop="10dp"
-    android:paddingEnd="12dp"
-    android:paddingBottom="10dp">
+    android:paddingStart="@dimen/space_m"
+    android:paddingTop="@dimen/space_m"
+    android:paddingEnd="@dimen/space_m"
+    android:paddingBottom="@dimen/space_m"
+    android:stateListAnimator="@anim/grab_press_scale">
 
     <ImageView
         android:id="@+id/authorAvatar"

@@ -63,7 +63,7 @@ object Avatars {
     fun into(target: ImageView, avatar: Uri?, context: Context) {
         if (avatar != null) {
             target.load(avatar) {
-                crossfade(false)
+                crossfade(Motion.ms(context, R.integer.dur_crossfade).toInt())
                 placeholder(R.drawable.avatar_ring)
                 transformations(CircleCropTransformation())
                 // The largest circle this is drawn in is about 96 dp; the stored picture is bigger.
